@@ -18,6 +18,7 @@ TRADING_DAYS_6M = 126
 TRADING_DAYS_1W = 5
 TRADING_DAYS_52W = 252
 HISTORY_PERIOD = "1y"
+HISTORY_PERIOD_LONG = "2y"  # needed for rolling 1Y return (~253 bars)
 
 _HEADERS = {
     "User-Agent": "MarketAgent/1.0 (daily market brief; contact: local)",

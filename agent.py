@@ -63,6 +63,7 @@ from mcp_server.tools.market_data import (
     fetch_sp500_universe,
     fetch_stock_history,
     last_trading_date,
+    HISTORY_PERIOD_LONG,
 )
 from mcp_server.tools.sectors import (
     get_sector_breakdown,
@@ -466,7 +467,7 @@ def run_bullion_weekly_pipeline() -> dict:
         dict.fromkeys([*market_tickers, *stock_tickers, *etf_tickers, *mf_tickers, *forex_tickers])
     )
 
-    history = fetch_stock_history(all_tickers)
+    history = fetch_stock_history(all_tickers, period=HISTORY_PERIOD_LONG)
     market_history = {t: history[t] for t in market_tickers if t in history}
     stock_history = {t: history[t] for t in stock_tickers if t in history}
     etf_history = {t: history[t] for t in etf_tickers if t in history}
@@ -519,7 +520,7 @@ def run_bullion_monthly_pipeline() -> dict:
         dict.fromkeys([*market_tickers, *stock_tickers, *etf_tickers, *mf_tickers, *forex_tickers])
     )
 
-    history = fetch_stock_history(all_tickers)
+    history = fetch_stock_history(all_tickers, period=HISTORY_PERIOD_LONG)
     market_history = {t: history[t] for t in market_tickers if t in history}
     stock_history = {t: history[t] for t in stock_tickers if t in history}
     etf_history = {t: history[t] for t in etf_tickers if t in history}
