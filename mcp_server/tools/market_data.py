@@ -41,6 +41,18 @@ def fetch_sp500_universe() -> pd.DataFrame:
         raise
 
 
+def last_trading_date(history: dict[str, pd.DataFrame]) -> pd.Timestamp | None:
+    """Latest closing date across downloaded price history."""
+    latest: pd.Timestamp | None = None
+    for frame in history.values():
+        if frame.empty or not isinstance(frame.index, pd.DatetimeIndex):
+            continue
+        ts = pd.Timestamp(frame.index[-1])
+        if latest is None or ts > latest:
+            latest = ts
+    return latest
+
+
 def fetch_stock_history(
     tickers: list[str],
     period: str = HISTORY_PERIOD,

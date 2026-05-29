@@ -316,14 +316,22 @@ def analyze_top_stocks_momentum(
     )
 
 
-def analyze_top_stocks_weekly(universe: pd.DataFrame, top_n: int = 20) -> list[dict]:
+def analyze_top_stocks_weekly(
+    universe: pd.DataFrame, top_n: int = 20, history: dict | None = None
+) -> list[dict]:
     """Weekly: top S&P 500 stocks by 5-day return with positive week."""
-    return _collect_stock_metrics(universe, _passes_weekly_filters, "week_change_pct", top_n)
+    return _collect_stock_metrics(
+        universe, _passes_weekly_filters, "week_change_pct", top_n, history=history
+    )
 
 
-def analyze_top_stocks_monthly(universe: pd.DataFrame, top_n: int = 20) -> list[dict]:
+def analyze_top_stocks_monthly(
+    universe: pd.DataFrame, top_n: int = 20, history: dict | None = None
+) -> list[dict]:
     """Monthly: top S&P 500 stocks by ~21-day (1M) return with positive month."""
-    return _collect_stock_metrics(universe, _passes_monthly_filters, "month_change_pct", top_n)
+    return _collect_stock_metrics(
+        universe, _passes_monthly_filters, "month_change_pct", top_n, history=history
+    )
 
 
 def _analyze_ticker_list(
@@ -337,7 +345,10 @@ def _analyze_ticker_list(
     if history is None:
         history = fetch_stock_history(list(tickers.keys()))
 
-    for ticker, frame in history.items():
+    for ticker in tickers:
+        frame = history.get(ticker)
+        if frame is None or frame.empty:
+            continue
         try:
             metrics = _compute_metrics(
                 ticker, frame, name=tickers.get(ticker, ticker), sector="Fund"
@@ -364,15 +375,15 @@ def analyze_top_etfs_momentum(top_n: int = 20, history: dict | None = None) -> l
     )
 
 
-def analyze_top_etfs_weekly(top_n: int = 20) -> list[dict]:
+def analyze_top_etfs_weekly(top_n: int = 20, history: dict | None = None) -> list[dict]:
     return _analyze_ticker_list(
-        {t: t for t in ETF_UNIVERSE}, top_n, sort_key="week_change_pct"
+        {t: t for t in ETF_UNIVERSE}, top_n, sort_key="week_change_pct", history=history
     )
 
 
-def analyze_top_etfs_monthly(top_n: int = 20) -> list[dict]:
+def analyze_top_etfs_monthly(top_n: int = 20, history: dict | None = None) -> list[dict]:
     return _analyze_ticker_list(
-        {t: t for t in ETF_UNIVERSE}, top_n, sort_key="month_change_pct"
+        {t: t for t in ETF_UNIVERSE}, top_n, sort_key="month_change_pct", history=history
     )
 
 
@@ -388,9 +399,13 @@ def analyze_top_mutual_funds_momentum(top_n: int = 20, history: dict | None = No
     )
 
 
-def analyze_top_mutual_funds_weekly(top_n: int = 20) -> list[dict]:
-    return _analyze_ticker_list(MUTUAL_FUND_UNIVERSE, top_n, sort_key="week_change_pct")
+def analyze_top_mutual_funds_weekly(top_n: int = 20, history: dict | None = None) -> list[dict]:
+    return _analyze_ticker_list(
+        MUTUAL_FUND_UNIVERSE, top_n, sort_key="week_change_pct", history=history
+    )
 
 
-def analyze_top_mutual_funds_monthly(top_n: int = 20) -> list[dict]:
-    return _analyze_ticker_list(MUTUAL_FUND_UNIVERSE, top_n, sort_key="month_change_pct")
+def analyze_top_mutual_funds_monthly(top_n: int = 20, history: dict | None = None) -> list[dict]:
+    return _analyze_ticker_list(
+        MUTUAL_FUND_UNIVERSE, top_n, sort_key="month_change_pct", history=history
+    )

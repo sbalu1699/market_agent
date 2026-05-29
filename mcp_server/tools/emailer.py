@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 import resend
@@ -12,6 +12,35 @@ import resend
 logger = logging.getLogger(__name__)
 ET = ZoneInfo("America/New_York")
 CST = ZoneInfo("America/Chicago")
+
+
+def _to_et(dt: datetime | date) -> datetime:
+    if isinstance(dt, date) and not isinstance(dt, datetime):
+        dt = datetime(dt.year, dt.month, dt.day)
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=ET)
+    return dt.astimezone(ET)
+
+
+def _format_report_date(as_of: datetime | date | None, period: str = "daily") -> str:
+    """Human-readable market data date for report headers."""
+    dt = _to_et(as_of or datetime.now(ET))
+    if period == "weekly":
+        return f"Week Ending {dt.strftime('%B %d, %Y')}"
+    if period == "monthly":
+        return dt.strftime("%B %Y")
+    return dt.strftime("%B %d, %Y")
+
+
+def _format_sent_timestamp(sent_at: datetime | None, period: str = "daily") -> str:
+    tz = CST if period in ("weekly", "monthly") else ET
+    label = "CST" if period in ("weekly", "monthly") else "ET"
+    now = sent_at or datetime.now(tz)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=tz)
+    else:
+        now = now.astimezone(tz)
+    return now.strftime(f"%A, %B %d, %Y %I:%M %p {label}")
 
 
 def _fmt_pct(value: float | None) -> str:
@@ -228,33 +257,34 @@ def build_html_report(
     summary: str = "",
     period: str = "daily",
     variant: str = "day",
+    as_of: datetime | date | None = None,
 ) -> str:
     """Build a formatted HTML email body (daily, weekly, or monthly)."""
+    report_date = _format_report_date(as_of, period)
+    sent_at = _format_sent_timestamp(datetime.now(), period)
+    as_of_line = (
+        f'<p style="color:#64748b">Data as of {report_date} · Sent {sent_at}</p>'
+    )
+
     if period == "weekly":
-        now = datetime.now(CST).strftime("%A, %B %d, %Y %I:%M %p CST")
-        title = "Weekly Market Performance"
+        title = f"Weekly Market Performance — {report_date}"
         subtitle = (
             "Top 20 ranked by 5-day week change. "
             "Stocks: positive week + liquidity filters. ETFs/funds: full universe."
         )
     elif period == "monthly":
-        now = datetime.now(CST).strftime("%A, %B %d, %Y %I:%M %p CST")
-        title = "Monthly Market Performance"
+        title = f"Monthly Market Performance — {report_date}"
         subtitle = (
             "Top 20 ranked by ~21-day month change. "
             "Stocks: positive month + liquidity filters. ETFs/funds: full universe."
         )
     elif variant == "momentum":
-        report_date = datetime.now(ET).strftime("%B %d, %Y")
-        now = datetime.now(ET).strftime("%A, %B %d, %Y %I:%M %p ET")
         title = f"Daily Market Performance — {report_date} (Momentum)"
         subtitle = (
             "Top 20 ranked by 1-month return. Stock filters: price ≥ $2, avg volume ≥ 500k, "
             "positive 1M & 2M returns, above MA20 & MA60. ETFs/funds: full universe."
         )
     else:
-        report_date = datetime.now(ET).strftime("%B %d, %Y")
-        now = datetime.now(ET).strftime("%A, %B %d, %Y %I:%M %p ET")
         title = f"Daily Market Performance — {report_date}"
         subtitle = (
             "Top 20 ranked by day change. Stock filters: price ≥ $2, avg volume ≥ 500k, "
@@ -266,7 +296,7 @@ def build_html_report(
     <html>
     <body style="font-family:Arial,sans-serif;color:#1e293b;max-width:900px;margin:auto">
       <h1 style="color:#0f172a">{title}</h1>
-      <p style="color:#64748b">{now}</p>
+      {as_of_line}
       {f'<p><em>{summary}</em></p>' if summary else ''}
 
       <h2>Top Performing Stocks</h2>
@@ -277,11 +307,11 @@ def build_html_report(
       {_build_sector_table(sectors, period, variant)}
 
       <h2 style="margin-top:32px">Top ETFs</h2>
-      <p style="font-size:13px;color:#64748b">Top 20 ranked from broad-market ETF universe (all sectors, semiconductors, international, thematic)</p>
+      <p style="font-size:13px;color:#64748b">Top 20 ETFs ranked from the ETF universe only (sectors, semiconductors, international, thematic)</p>
       {_build_fund_table(etfs, "ETF", period, variant)}
 
       <h2 style="margin-top:32px">Top Mutual Funds</h2>
-      <p style="font-size:13px;color:#64748b">Sector-diverse mutual fund universe</p>
+      <p style="font-size:13px;color:#64748b">Top 20 mutual funds ranked from the mutual fund universe only (index and sector-diverse funds)</p>
       {_build_fund_table(mutual_funds, "mutual fund", period, variant)}
 
       <p style="margin-top:32px;font-size:12px;color:#94a3b8">
@@ -301,6 +331,7 @@ def send_report_email(
     subject: str | None = None,
     period: str = "daily",
     variant: str = "day",
+    as_of: datetime | date | None = None,
 ) -> dict:
     """Send the market report via Resend."""
     api_key = os.getenv("RESEND_API_KEY")
@@ -311,18 +342,20 @@ def send_report_email(
         raise ValueError("Missing RESEND_API_KEY, EMAIL_FROM, or EMAIL_TO in environment")
 
     if subject is None:
-        today = datetime.now(ET).strftime("%Y-%m-%d")
+        as_of_dt = _to_et(as_of or datetime.now(ET))
+        date_str = as_of_dt.strftime("%Y-%m-%d")
         subjects = {
-            "weekly": "Market performance — Weekly",
-            "monthly": "Market performance — Monthly",
-            "daily": f"Market performance — {today}",
-            "daily_momentum": f"Market performance — {today} (Momentum)",
+            "weekly": f"Market performance — Weekly ({date_str})",
+            "monthly": f"Market performance — Monthly ({as_of_dt.strftime('%Y-%m')})",
+            "daily": f"Market performance — {date_str}",
+            "daily_momentum": f"Market performance — {date_str} (Momentum)",
         }
         key = "daily_momentum" if period == "daily" and variant == "momentum" else period
         subject = subjects.get(key, "Market performance")
 
     html = build_html_report(
-        stocks, sectors, etfs, mutual_funds or [], summary, period=period, variant=variant
+        stocks, sectors, etfs, mutual_funds or [], summary,
+        period=period, variant=variant, as_of=as_of,
     )
 
     resend.api_key = api_key

@@ -31,8 +31,15 @@ from mcp_server.tools.analyzer import (
     analyze_top_stocks_momentum,
     analyze_top_stocks_weekly,
 )
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from mcp_server.tools.emailer import send_report_email
-from mcp_server.tools.market_data import fetch_sp500_universe, fetch_stock_history
+from mcp_server.tools.market_data import (
+    fetch_sp500_universe,
+    fetch_stock_history,
+    last_trading_date,
+)
 from mcp_server.tools.sectors import (
     get_sector_breakdown,
     get_sector_breakdown_monthly,
@@ -47,6 +54,23 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("market-agent")
+
+ET = ZoneInfo("America/New_York")
+
+
+def _report_as_of(*histories: dict) -> datetime:
+    """Use latest market close date from downloaded price history."""
+    merged: dict = {}
+    for history in histories:
+        merged.update(history)
+    ts = last_trading_date(merged)
+    if ts is None:
+        return datetime.now(ET)
+    dt = ts.to_pydatetime()
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=ET)
+    return dt.astimezone(ET)
+
 
 SYSTEM = """
 You are a financial market analyst agent. Every trading day you:
@@ -224,14 +248,15 @@ def run_pipeline() -> dict:
     logger.info("Running direct market pipeline (dual daily reports)...")
     universe = fetch_sp500_universe()
     stock_history = fetch_stock_history(universe["Symbol"].tolist())
-    fund_tickers = list(dict.fromkeys([*ETF_UNIVERSE, *MUTUAL_FUND_UNIVERSE.keys()]))
-    fund_history = fetch_stock_history(fund_tickers)
+    etf_history = fetch_stock_history(ETF_UNIVERSE)
+    mf_history = fetch_stock_history(list(MUTUAL_FUND_UNIVERSE.keys()))
+    as_of = _report_as_of(stock_history, etf_history, mf_history)
 
     # --- Report 1: day-change ranking (current) ---
     stocks = analyze_top_stocks(universe, top_n=20, history=stock_history)
     sectors = get_sector_breakdown(universe, history=stock_history)
-    etfs = analyze_top_etfs(top_n=20, history=fund_history)
-    mutual_funds = analyze_top_mutual_funds(top_n=20, history=fund_history)
+    etfs = analyze_top_etfs(top_n=20, history=etf_history)
+    mutual_funds = analyze_top_mutual_funds(top_n=20, history=mf_history)
 
     top_mover = stocks[0]["ticker"] if stocks else "N/A"
     best_sector = sectors[0]["sector"] if sectors else "N/A"
@@ -246,15 +271,16 @@ def run_pipeline() -> dict:
     )
 
     email_day = send_report_email(
-        stocks, sectors, etfs, mutual_funds, summary=summary, period="daily", variant="day"
+        stocks, sectors, etfs, mutual_funds,
+        summary=summary, period="daily", variant="day", as_of=as_of,
     )
     logger.info("Daily (day-change) report sent.")
 
     # --- Report 2: legacy 1M momentum ranking ---
     stocks_mom = analyze_top_stocks_momentum(universe, top_n=20, history=stock_history)
     sectors_mom = get_sector_breakdown_momentum(universe, history=stock_history)
-    etfs_mom = analyze_top_etfs_momentum(top_n=20, history=fund_history)
-    mutual_mom = analyze_top_mutual_funds_momentum(top_n=20, history=fund_history)
+    etfs_mom = analyze_top_etfs_momentum(top_n=20, history=etf_history)
+    mutual_mom = analyze_top_mutual_funds_momentum(top_n=20, history=mf_history)
 
     top_mom = stocks_mom[0]["ticker"] if stocks_mom else "N/A"
     best_sector_mom = sectors_mom[0]["sector"] if sectors_mom else "N/A"
@@ -276,6 +302,7 @@ def run_pipeline() -> dict:
         summary=summary_mom,
         period="daily",
         variant="momentum",
+        as_of=as_of,
     )
     logger.info("Daily (momentum) report sent.")
 
@@ -301,10 +328,15 @@ def run_weekly_pipeline() -> dict:
     """Weekly pipeline — best performers over the 5-day trading week."""
     logger.info("Running weekly market pipeline...")
     universe = fetch_sp500_universe()
-    stocks = analyze_top_stocks_weekly(universe, top_n=20)
-    sectors = get_sector_breakdown_weekly(universe)
-    etfs = analyze_top_etfs_weekly(top_n=20)
-    mutual_funds = analyze_top_mutual_funds_weekly(top_n=20)
+    stock_history = fetch_stock_history(universe["Symbol"].tolist())
+    etf_history = fetch_stock_history(ETF_UNIVERSE)
+    mf_history = fetch_stock_history(list(MUTUAL_FUND_UNIVERSE.keys()))
+    as_of = _report_as_of(stock_history, etf_history, mf_history)
+
+    stocks = analyze_top_stocks_weekly(universe, top_n=20, history=stock_history)
+    sectors = get_sector_breakdown_weekly(universe, history=stock_history)
+    etfs = analyze_top_etfs_weekly(top_n=20, history=etf_history)
+    mutual_funds = analyze_top_mutual_funds_weekly(top_n=20, history=mf_history)
 
     top_mover = stocks[0]["ticker"] if stocks else "N/A"
     best_sector = sectors[0]["sector"] if sectors else "N/A"
@@ -318,7 +350,7 @@ def run_weekly_pipeline() -> dict:
     )
 
     email_result = send_report_email(
-        stocks, sectors, etfs, mutual_funds, summary=summary, period="weekly"
+        stocks, sectors, etfs, mutual_funds, summary=summary, period="weekly", as_of=as_of
     )
     return {
         "stocks": stocks,
@@ -334,10 +366,15 @@ def run_monthly_pipeline() -> dict:
     """Monthly pipeline — best performers over ~21 trading days (1 month)."""
     logger.info("Running monthly market pipeline...")
     universe = fetch_sp500_universe()
-    stocks = analyze_top_stocks_monthly(universe, top_n=20)
-    sectors = get_sector_breakdown_monthly(universe)
-    etfs = analyze_top_etfs_monthly(top_n=20)
-    mutual_funds = analyze_top_mutual_funds_monthly(top_n=20)
+    stock_history = fetch_stock_history(universe["Symbol"].tolist())
+    etf_history = fetch_stock_history(ETF_UNIVERSE)
+    mf_history = fetch_stock_history(list(MUTUAL_FUND_UNIVERSE.keys()))
+    as_of = _report_as_of(stock_history, etf_history, mf_history)
+
+    stocks = analyze_top_stocks_monthly(universe, top_n=20, history=stock_history)
+    sectors = get_sector_breakdown_monthly(universe, history=stock_history)
+    etfs = analyze_top_etfs_monthly(top_n=20, history=etf_history)
+    mutual_funds = analyze_top_mutual_funds_monthly(top_n=20, history=mf_history)
 
     top_mover = stocks[0]["ticker"] if stocks else "N/A"
     best_sector = sectors[0]["sector"] if sectors else "N/A"
@@ -351,7 +388,7 @@ def run_monthly_pipeline() -> dict:
     )
 
     email_result = send_report_email(
-        stocks, sectors, etfs, mutual_funds, summary=summary, period="monthly"
+        stocks, sectors, etfs, mutual_funds, summary=summary, period="monthly", as_of=as_of
     )
     return {
         "stocks": stocks,

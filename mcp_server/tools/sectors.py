@@ -164,11 +164,15 @@ def get_sector_breakdown_momentum(
     )
 
 
-def get_sector_breakdown_weekly(universe: pd.DataFrame) -> list[dict]:
+def get_sector_breakdown_weekly(
+    universe: pd.DataFrame, history: dict | None = None
+) -> list[dict]:
     """Weekly sector breakdown with 5-day change averages."""
-    return _aggregate_sectors(universe, period="weekly")
+    return _aggregate_sectors(universe, period="weekly", history=history)
 
 
-def get_sector_breakdown_monthly(universe: pd.DataFrame) -> list[dict]:
+def get_sector_breakdown_monthly(
+    universe: pd.DataFrame, history: dict | None = None
+) -> list[dict]:
     """Monthly sector breakdown with ~21-day change averages."""
-    return _aggregate_sectors(universe, period="monthly")
+    return _aggregate_sectors(universe, period="monthly", history=history)
