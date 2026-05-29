@@ -296,13 +296,13 @@ def _build_fund_table(
           <td>{rank}</td>
           <td><strong>{f['ticker']}</strong></td>
           <td>{f.get('name', f['ticker'])[:45]}</td>
+          <td>{_fmt_expense_ratio(f.get('expense_ratio'))}</td>
           <td>${f['price']:.2f}</td>
           {_primary_sort_cell(d_val, p_val)}
           <td style="color:{_color(f.get('ytd_change_dollar'))}">{_fmt_dollar_change(f.get('ytd_change_dollar'))}</td>
           <td style="color:{_color(f.get('ytd_change_pct'))}">{_fmt_pct(f.get('ytd_change_pct'))}</td>
           <td style="color:{_color(f['return_1m'])}">{_fmt_pct(f['return_1m'])}</td>
           <td style="color:{_color(f['return_2m'])}">{_fmt_pct(f['return_2m'])}</td>
-          <td>{_fmt_expense_ratio(f.get('expense_ratio'))}</td>
           <td>{_fmt_price(f.get('week52_high'))}</td>
           <td>{_fmt_price(f.get('week52_low'))}</td>
         </tr>"""
@@ -311,10 +311,10 @@ def _build_fund_table(
     <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;width:100%">
       <thead style="background:#1e293b;color:#fff">
         <tr>
-          <th>#</th><th>Ticker</th><th>Name</th><th>Price</th>
+          <th>#</th><th>Ticker</th><th>Name</th><th>Exp Ratio</th><th>Price</th>
           <th style="background:#334155">{sort_header}</th>
           <th>YTD ($)</th><th>YTD (%)</th>
-          <th>1M Return</th><th>2M Return</th><th>Exp Ratio</th>
+          <th>1M Return</th><th>2M Return</th>
           <th>52W High</th><th>52W Low</th>
         </tr>
       </thead>
@@ -432,11 +432,11 @@ def build_html_report(
       {_build_sector_table(sectors, period, variant)}
 
       <h2 style="margin-top:32px">Top ETFs</h2>
-      <p style="font-size:13px;color:#64748b">Top 20 ETFs ranked from the ETF universe only (sectors, semiconductors, international, thematic)</p>
+      <p style="font-size:13px;color:#64748b">Top 20 ETFs ranked from the ETF universe only (sectors, semiconductors, international, thematic). Exp Ratio = net expense ratio (%).</p>
       {_build_fund_table(etfs, "ETF", period, variant)}
 
       <h2 style="margin-top:32px">Top Mutual Funds</h2>
-      <p style="font-size:13px;color:#64748b">Top 20 mutual funds ranked from the mutual fund universe only (index and sector-diverse funds)</p>
+      <p style="font-size:13px;color:#64748b">Top 20 mutual funds ranked from the mutual fund universe only (index and sector-diverse funds). Exp Ratio = net expense ratio (%).</p>
       {_build_fund_table(mutual_funds, "mutual fund", period, variant)}
 
       {_build_crypto_section(crypto_overview or [], crypto_etfs or [], period, variant)}
