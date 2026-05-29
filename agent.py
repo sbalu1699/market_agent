@@ -48,6 +48,7 @@ from mcp_server.tools.bullion import (
     BULLION_MARKET_UNIVERSE,
     BULLION_MUTUAL_FUND_UNIVERSE,
     BULLION_STOCK_UNIVERSE,
+    FOREX_UNIVERSE,
     analyze_bullion_etfs_monthly,
     analyze_bullion_etfs_weekly,
     analyze_bullion_mutual_funds_monthly,
@@ -55,6 +56,7 @@ from mcp_server.tools.bullion import (
     analyze_bullion_stocks_monthly,
     analyze_bullion_stocks_weekly,
     get_bullion_market_overview,
+    get_forex_overview,
 )
 from mcp_server.tools.emailer import send_bullion_report_email, send_report_email
 from mcp_server.tools.market_data import (
@@ -459,16 +461,21 @@ def run_bullion_weekly_pipeline() -> dict:
     stock_tickers = list(BULLION_STOCK_UNIVERSE.keys())
     etf_tickers = list(BULLION_ETF_UNIVERSE.keys())
     mf_tickers = list(BULLION_MUTUAL_FUND_UNIVERSE.keys())
-    all_tickers = list(dict.fromkeys([*market_tickers, *stock_tickers, *etf_tickers, *mf_tickers]))
+    forex_tickers = list(FOREX_UNIVERSE.keys())
+    all_tickers = list(
+        dict.fromkeys([*market_tickers, *stock_tickers, *etf_tickers, *mf_tickers, *forex_tickers])
+    )
 
     history = fetch_stock_history(all_tickers)
     market_history = {t: history[t] for t in market_tickers if t in history}
     stock_history = {t: history[t] for t in stock_tickers if t in history}
     etf_history = {t: history[t] for t in etf_tickers if t in history}
     mf_history = {t: history[t] for t in mf_tickers if t in history}
+    forex_history = {t: history[t] for t in forex_tickers if t in history}
     as_of = _report_as_of(history)
 
     overview = get_bullion_market_overview("weekly", history=market_history)
+    forex = get_forex_overview("weekly", history=forex_history)
     stocks = analyze_bullion_stocks_weekly(top_n=20, history=stock_history)
     etfs = analyze_bullion_etfs_weekly(top_n=20, history=etf_history)
     mutual_funds = analyze_bullion_mutual_funds_weekly(top_n=20, history=mf_history)
@@ -487,10 +494,11 @@ def run_bullion_weekly_pipeline() -> dict:
 
     email_result = send_bullion_report_email(
         overview, stocks, etfs, mutual_funds,
-        summary=summary, period="weekly", as_of=as_of,
+        summary=summary, period="weekly", as_of=as_of, forex_overview=forex,
     )
     return {
         "market_overview": overview,
+        "forex_overview": forex,
         "stocks": stocks,
         "etfs": etfs,
         "mutual_funds": mutual_funds,
@@ -506,16 +514,21 @@ def run_bullion_monthly_pipeline() -> dict:
     stock_tickers = list(BULLION_STOCK_UNIVERSE.keys())
     etf_tickers = list(BULLION_ETF_UNIVERSE.keys())
     mf_tickers = list(BULLION_MUTUAL_FUND_UNIVERSE.keys())
-    all_tickers = list(dict.fromkeys([*market_tickers, *stock_tickers, *etf_tickers, *mf_tickers]))
+    forex_tickers = list(FOREX_UNIVERSE.keys())
+    all_tickers = list(
+        dict.fromkeys([*market_tickers, *stock_tickers, *etf_tickers, *mf_tickers, *forex_tickers])
+    )
 
     history = fetch_stock_history(all_tickers)
     market_history = {t: history[t] for t in market_tickers if t in history}
     stock_history = {t: history[t] for t in stock_tickers if t in history}
     etf_history = {t: history[t] for t in etf_tickers if t in history}
     mf_history = {t: history[t] for t in mf_tickers if t in history}
+    forex_history = {t: history[t] for t in forex_tickers if t in history}
     as_of = _report_as_of(history)
 
     overview = get_bullion_market_overview("monthly", history=market_history)
+    forex = get_forex_overview("monthly", history=forex_history)
     stocks = analyze_bullion_stocks_monthly(top_n=20, history=stock_history)
     etfs = analyze_bullion_etfs_monthly(top_n=20, history=etf_history)
     mutual_funds = analyze_bullion_mutual_funds_monthly(top_n=20, history=mf_history)
@@ -534,10 +547,11 @@ def run_bullion_monthly_pipeline() -> dict:
 
     email_result = send_bullion_report_email(
         overview, stocks, etfs, mutual_funds,
-        summary=summary, period="monthly", as_of=as_of,
+        summary=summary, period="monthly", as_of=as_of, forex_overview=forex,
     )
     return {
         "market_overview": overview,
+        "forex_overview": forex,
         "stocks": stocks,
         "etfs": etfs,
         "mutual_funds": mutual_funds,

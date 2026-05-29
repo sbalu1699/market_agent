@@ -86,6 +86,17 @@ BULLION_MUTUAL_FUND_UNIVERSE: dict[str, str] = {
     "UNWPX": "US Global World Precious Minerals",
 }
 
+# Major FX pairs (yfinance =X suffix) — shown in bullion email overview
+FOREX_UNIVERSE: dict[str, str] = {
+    "USDINR=X": "USD / INR",
+    "EURUSD=X": "EUR / USD",
+    "GBPUSD=X": "GBP / USD",
+    "USDJPY=X": "USD / JPY",
+    "AUDUSD=X": "AUD / USD",
+    "USDCAD=X": "USD / CAD",
+    "USDCHF=X": "USD / CHF",
+}
+
 
 def _passes_weekly_fund_filters(metrics: StockMetrics) -> bool:
     """Mutual funds: same period/price rules as stocks; skip volume (yfinance reports 0)."""
@@ -163,6 +174,15 @@ def get_bullion_market_overview(
     """All four precious metals with period returns (overview table)."""
     sort_key = "week_change_pct" if period == "weekly" else "month_change_pct"
     return _collect_all(BULLION_MARKET_UNIVERSE, sort_key, history, sector="Metal")
+
+
+def get_forex_overview(
+    period: str = "weekly",
+    history: dict | None = None,
+) -> list[dict]:
+    """Major FX pairs with period returns (bullion email only)."""
+    sort_key = "week_change_pct" if period == "weekly" else "month_change_pct"
+    return _collect_all(FOREX_UNIVERSE, sort_key, history, sector="Forex")
 
 
 def analyze_bullion_stocks_weekly(

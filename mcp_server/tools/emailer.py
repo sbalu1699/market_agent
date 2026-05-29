@@ -63,6 +63,68 @@ def _fmt_dollar_change(value: float | None) -> str:
     return f"{sign}${abs(value):.2f}"
 
 
+def _fmt_forex_rate(ticker: str, value: float | None) -> str:
+    if value is None:
+        return "N/A"
+    if ticker == "USDINR=X":
+        return f"₹{value:.2f}"
+    if ticker in ("USDJPY=X", "USDCAD=X"):
+        return f"{value:.3f}"
+    return f"{value:.4f}"
+
+
+def _fmt_forex_change(abs_change: float | None, pct: float | None) -> str:
+    if abs_change is None and pct is None:
+        return "N/A"
+    if abs_change is None:
+        return _fmt_pct(pct)
+    sign = "+" if abs_change >= 0 else "-"
+    abs_part = f"{sign}{abs(abs_change):.4f}"
+    if pct is None:
+        return abs_part
+    return f"{abs_part} ({_fmt_pct(pct)})"
+
+
+def _forex_primary_sort_cell(ticker: str, d_val: float | None, p_val: float | None) -> str:
+    color = _color(p_val if p_val is not None else d_val)
+    text = _fmt_forex_change(d_val, p_val)
+    return f'<td style="color:{color};font-weight:600">{text}</td>'
+
+
+def _build_forex_table(forex: list[dict], period: str = "weekly") -> str:
+    if not forex:
+        return "<p>No forex data available.</p>"
+
+    chg_d, chg_p = _primary_sort_keys(period)
+    sort_header = _primary_sort_header(period)
+    rows = ""
+    for rank, fx in enumerate(forex, start=1):
+        d_val = fx.get(chg_d) if chg_d else None
+        p_val = fx.get(chg_p) if chg_p else None
+        ticker = fx["ticker"]
+        rows += f"""
+        <tr>
+          <td>{rank}</td>
+          <td><strong>{fx.get('name', ticker)}</strong></td>
+          <td>{_fmt_forex_rate(ticker, fx.get('price'))}</td>
+          {_forex_primary_sort_cell(ticker, d_val, p_val)}
+          <td style="color:{_color(fx.get('ytd_change_pct'))}">{_fmt_pct(fx.get('ytd_change_pct'))}</td>
+          <td style="color:{_color(fx.get('return_1m'))}">{_fmt_pct(fx.get('return_1m'))}</td>
+        </tr>"""
+
+    return f"""
+    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;width:100%;margin-top:8px">
+      <thead style="background:#1e293b;color:#fff">
+        <tr>
+          <th>#</th><th>Pair</th><th>Rate</th>
+          <th style="background:#334155">{sort_header}</th>
+          <th>YTD (%)</th><th>1M Return</th>
+        </tr>
+      </thead>
+      <tbody>{rows}</tbody>
+    </table>"""
+
+
 PERIOD_COLUMNS = {
     "daily": ("day_change_dollar", "day_change_pct", "Day Chg ($)", "Day Chg (%)"),
     "weekly": ("week_change_dollar", "week_change_pct", "Week Chg ($)", "Week Chg (%)"),
@@ -447,6 +509,7 @@ def build_bullion_html_report(
     summary: str = "",
     period: str = "weekly",
     as_of: datetime | date | None = None,
+    forex_overview: list[dict] | None = None,
 ) -> str:
     """HTML report for bullion / precious metals (weekly or monthly)."""
     report_date = _format_report_date(as_of, period)
@@ -511,6 +574,12 @@ def build_bullion_html_report(
       </p>
       {overview_table}
 
+      <h2 style="margin-top:32px">Major Forex</h2>
+      <p style="font-size:13px;color:#64748b">
+        USD/INR and other major currency pairs — spot rates via Yahoo Finance
+      </p>
+      {_build_forex_table(forex_overview or [], period)}
+
       <h2 style="margin-top:32px">Top Bullion Stocks</h2>
       <p style="font-size:13px;color:#64748b">{filter_desc}</p>
       {_build_stocks_table(stocks, period)}
@@ -540,6 +609,7 @@ def send_bullion_report_email(
     subject: str | None = None,
     period: str = "weekly",
     as_of: datetime | date | None = None,
+    forex_overview: list[dict] | None = None,
 ) -> dict:
     """Send bullion market report via Resend."""
     api_key = os.getenv("RESEND_API_KEY")
@@ -559,7 +629,7 @@ def send_bullion_report_email(
 
     html = build_bullion_html_report(
         market_overview, stocks, etfs, mutual_funds or [],
-        summary, period=period, as_of=as_of,
+        summary, period=period, as_of=as_of, forex_overview=forex_overview,
     )
 
     resend.api_key = api_key

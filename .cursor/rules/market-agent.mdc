@@ -13,6 +13,7 @@ alwaysApply: false
 - Separate email: `Bullion market — Weekly/Monthly`
 - **No crypto section** in bullion emails — crypto is broad-market only
 - **Overview:** Gold (GLD), Silver (SLV), Platinum (PPLT), Palladium (PALL)
+- **Forex:** USD/INR plus major pairs (EUR/USD, GBP/USD, USD/JPY, AUD/USD, USD/CAD, USD/CHF) — after metals overview
 - **Stocks:** `BULLION_STOCK_UNIVERSE` — miners & royalty names
 - **ETFs:** `BULLION_ETF_UNIVERSE` — physical, miners, diversified precious-metal ETFs
 - **Mutual funds:** `BULLION_MUTUAL_FUND_UNIVERSE` — gold/precious metals funds; price ≥ $2 + positive period (volume skipped — yfinance reports 0 for funds)
