@@ -1,0 +1,67 @@
+---
+description: Rules for the daily, weekly, and monthly market analysis agent
+globs: ["**/*.py"]
+alwaysApply: false
+---
+
+## Email Schedule
+- **Daily** — 7:04 PM ET on trading days — **two emails back-to-back**:
+  1. **Day ranking** — sort by day change; stock filters: positive 1M/2M, above MA20 & MA50
+  2. **Momentum ranking** — sort by 1M return; stock filters: positive 1M/2M, above MA20 & MA60
+- **Weekly** — Saturday 10:06 AM CST
+- **Monthly** — 1st of each month 10:06 AM CST
+
+## Change Columns
+- **Primary Sort** — combined `$ and %` for the report period (Day / Week / Month); this is the ranking column
+- All reports also show: YTD ($), YTD (%), 1M/2M return, 52W high/low where applicable
+- Rank `#` column shows sort order (1 = best performer)
+
+## Universe & Ranking Rules (IMPORTANT)
+
+### Do NOT add ad-hoc tickers
+- Never add individual ETFs, funds, or stocks to the universe because the user mentions them once (e.g. "add DRAM").
+- Universe changes must be **systematic and broad** — maintain sector-complete coverage, not reactive one-offs.
+
+### ETF & mutual fund universe must cover all sectors
+- `ETF_UNIVERSE` must include **all 11 GICS sector** representatives (e.g. XLK, XLF, XLE, XLV, XLI, XLY, XLP, XLU, XLRE, XLB, XLC) plus broad market, semiconductors, sub-sectors, international, and thematic funds.
+- `MUTUAL_FUND_UNIVERSE` should include broad index funds and sector-diverse industry funds (e.g. Fidelity Select series).
+- Do **not** filter ETFs/funds to positive returns only on weekly/monthly reports — rank the full universe.
+
+### Top 20 in email is OK
+- ETF and mutual fund **email tables** show the **top 20 ranked by period return** (day, week, or month matching the report). This is intentional.
+- A sector may not appear in the top 20 table if it underperforms — that is expected. It must still be **in the universe** so it can rank when it performs well.
+
+### Sector breakdown must include everything
+- Sector table uses the **full S&P 500** and must include **all GICS sectors** with average returns — not limited to top 20.
+- Sort sectors by average period return; do not drop sectors from the breakdown.
+
+### Stocks table (different from ETFs)
+- Top 20 **stocks** use momentum filters (positive returns, MAs, volume) — this is separate from the broad ETF universe rule.
+- Sector **breakdown** is where full stock sector coverage lives.
+
+## Sorting recipe (sort key must match report period)
+
+| Report | Stocks sort by | ETFs/funds sort by | Sectors sort by |
+|--------|----------------|--------------------|-----------------|
+| **Daily (day)** | `day_change_pct` | `day_change_pct` | `avg_day_change_pct` |
+| **Daily (momentum)** | `return_1m` | `return_1m` | `avg_return_1m` |
+| **Weekly** | `week_change_pct` | `week_change_pct` | `avg_week_change_pct` |
+| **Monthly** | `month_change_pct` | `month_change_pct` | `avg_month_change_pct` |
+
+### Daily stock filters (two variants)
+| Variant | Sort | MA filter |
+|---------|------|-----------|
+| Day | `day_change_pct` | MA20 & MA50 |
+| Momentum | `return_1m` | MA20 & MA60 |
+
+- YTD is displayed for context but **not** used as the primary sort key.
+- Stock **filters** (liquidity, MAs, positive period) gate eligibility; **sort** uses the period metric above.
+- ETFs/funds: no positivity filter — rank full universe, take top 20.
+
+## Commands
+```bash
+AGENT_MODE=pipeline python agent.py           # daily
+AGENT_MODE=pipeline python agent.py weekly    # weekly
+AGENT_MODE=pipeline python agent.py monthly   # monthly
+python scheduler.py                           # all three schedules
+```
