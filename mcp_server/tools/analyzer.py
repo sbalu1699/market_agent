@@ -96,6 +96,7 @@ class StockMetrics:
     return_1m: float
     return_2m: float
     return_6m: float | None
+    return_1y: float | None
     week52_high: float | None
     week52_low: float | None
     ma20: float
@@ -189,6 +190,7 @@ def _compute_metrics(
         return_1m = _calc_return(close, TRADING_DAYS_1M)
         return_2m = _calc_return(close, TRADING_DAYS_2M)
         return_6m = _calc_return(close, TRADING_DAYS_6M)
+        return_1y = _calc_return(close, TRADING_DAYS_52W)
         if return_1m is None or return_2m is None:
             return None
 
@@ -210,6 +212,7 @@ def _compute_metrics(
             return_1m=return_1m,
             return_2m=return_2m,
             return_6m=return_6m,
+            return_1y=return_1y,
             week52_high=week52_high,
             week52_low=week52_low,
             ma20=ma20,
