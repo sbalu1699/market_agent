@@ -278,6 +278,13 @@ def _build_sector_table(sectors: list[dict], period: str = "daily", variant: str
     </table>"""
 
 
+def _fmt_fund_name(name: str, expense_ratio: float | None, max_len: int = 45) -> str:
+    """Name plus inline expense ratio for narrow email clients."""
+    label = name[:max_len]
+    er = _fmt_expense_ratio(expense_ratio)
+    return f'{label}<br><span style="font-size:11px;color:#64748b">Exp ratio: {er}</span>'
+
+
 def _build_fund_table(
     funds: list[dict], label: str, period: str = "daily", variant: str = "day"
 ) -> str:
@@ -294,8 +301,8 @@ def _build_fund_table(
         rows += f"""
         <tr>
           <td>{rank}</td>
-          <td><strong>{f['ticker']}</strong></td>
-          <td>{f.get('name', f['ticker'])[:45]}</td>
+          <td><strong>{f['ticker']}</strong><br><span style="font-size:11px;color:#64748b">Exp: {_fmt_expense_ratio(f.get('expense_ratio'))}</span></td>
+          <td>{_fmt_fund_name(f.get('name', f['ticker']), f.get('expense_ratio'))}</td>
           <td>{_fmt_expense_ratio(f.get('expense_ratio'))}</td>
           <td>${f['price']:.2f}</td>
           {_primary_sort_cell(d_val, p_val)}
@@ -599,11 +606,11 @@ def build_bullion_html_report(
       {_build_stocks_table(stocks, period)}
 
       <h2 style="margin-top:32px">Top Bullion ETFs</h2>
-      <p style="font-size:13px;color:#64748b">{filter_desc}</p>
+      <p style="font-size:13px;color:#64748b">{filter_desc} Exp Ratio = net expense ratio (%).</p>
       {_build_fund_table(etfs, "bullion ETF", period)}
 
       <h2 style="margin-top:32px">Top Bullion Mutual Funds</h2>
-      <p style="font-size:13px;color:#64748b">Top 20 from bullion mutual fund universe; price ≥ $2 and positive period return (volume not applied — unavailable for funds on yfinance)</p>
+      <p style="font-size:13px;color:#64748b">Top 20 from bullion mutual fund universe; price ≥ $2 and positive period return (volume not applied — unavailable for funds on yfinance). Exp Ratio = net expense ratio (%).</p>
       {_build_fund_table(mutual_funds, "bullion mutual fund", period)}
 
       <p style="margin-top:32px;font-size:12px;color:#94a3b8">
