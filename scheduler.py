@@ -1,4 +1,4 @@
-"""Scheduler — daily 7:04 PM ET + weekly Saturday 10:06 AM CST."""
+"""Scheduler — daily 11:30 AM & 7:04 PM ET, weekly Sat 10:06 AM ET, monthly last day 7:00 PM ET."""
 
 from __future__ import annotations
 
@@ -17,7 +17,14 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 load_dotenv(ROOT / ".env")
 
-from agent import run_agent, run_monthly_pipeline, run_pipeline, run_weekly_pipeline
+from agent import (
+    run_agent,
+    run_bullion_monthly_pipeline,
+    run_bullion_weekly_pipeline,
+    run_monthly_pipeline,
+    run_pipeline,
+    run_weekly_pipeline,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -26,7 +33,6 @@ logging.basicConfig(
 logger = logging.getLogger("scheduler")
 
 ET = ZoneInfo("America/New_York")
-CST = ZoneInfo("America/Chicago")
 
 US_MARKET_HOLIDAYS_2026 = {
     "2026-01-01",
@@ -50,7 +56,7 @@ def is_trading_day(dt: datetime | None = None) -> bool:
 
 
 def daily_job() -> None:
-    """Daily report — runs on market days only."""
+    """Daily report — runs on market days only (morning and evening slots)."""
     now = datetime.now(ET)
     if not is_trading_day(now):
         logger.info("Daily skipped — not a trading day (%s)", now.strftime("%A %Y-%m-%d"))
@@ -69,64 +75,75 @@ def daily_job() -> None:
 
 
 def weekly_job() -> None:
-    """Weekly report — runs every Saturday morning."""
-    now = datetime.now(CST)
-    logger.info("Starting weekly market report at %s CST", now.strftime("%H:%M"))
+    """Weekly report — every Saturday morning ET."""
+    now = datetime.now(ET)
+    logger.info("Starting weekly market report at %s ET", now.strftime("%H:%M"))
     try:
         run_weekly_pipeline()
+        run_bullion_weekly_pipeline()
         logger.info("Weekly report completed.")
     except Exception:
         logger.exception("Weekly report failed.")
 
 
 def monthly_job() -> None:
-    """Monthly report — runs on the 1st of each month."""
-    now = datetime.now(CST)
-    logger.info("Starting monthly market report at %s CST", now.strftime("%H:%M"))
+    """Monthly report — last calendar day of each month, evening ET."""
+    now = datetime.now(ET)
+    logger.info("Starting monthly market report at %s ET", now.strftime("%H:%M"))
     try:
         run_monthly_pipeline()
+        run_bullion_monthly_pipeline()
         logger.info("Monthly report completed.")
     except Exception:
         logger.exception("Monthly report failed.")
 
 
 def main() -> None:
-    daily_hour = int(os.getenv("SCHEDULE_HOUR", "19"))
-    daily_minute = int(os.getenv("SCHEDULE_MINUTE", "4"))
+    daily_am_hour = int(os.getenv("DAILY_AM_SCHEDULE_HOUR", "11"))
+    daily_am_minute = int(os.getenv("DAILY_AM_SCHEDULE_MINUTE", "30"))
+    daily_pm_hour = int(os.getenv("SCHEDULE_HOUR", "19"))
+    daily_pm_minute = int(os.getenv("SCHEDULE_MINUTE", "4"))
     weekly_hour = int(os.getenv("WEEKLY_SCHEDULE_HOUR", "10"))
     weekly_minute = int(os.getenv("WEEKLY_SCHEDULE_MINUTE", "6"))
-    monthly_hour = int(os.getenv("MONTHLY_SCHEDULE_HOUR", "10"))
-    monthly_minute = int(os.getenv("MONTHLY_SCHEDULE_MINUTE", "6"))
+    monthly_hour = int(os.getenv("MONTHLY_SCHEDULE_HOUR", "19"))
+    monthly_minute = int(os.getenv("MONTHLY_SCHEDULE_MINUTE", "0"))
 
     scheduler = BlockingScheduler()
     scheduler.add_job(
         daily_job,
-        CronTrigger(hour=daily_hour, minute=daily_minute, timezone=ET),
-        id="daily_market_report",
-        name="Daily Market Report",
+        CronTrigger(hour=daily_am_hour, minute=daily_am_minute, timezone=ET),
+        id="daily_market_report_am",
+        name="Daily Market Report (AM)",
+    )
+    scheduler.add_job(
+        daily_job,
+        CronTrigger(hour=daily_pm_hour, minute=daily_pm_minute, timezone=ET),
+        id="daily_market_report_pm",
+        name="Daily Market Report (PM)",
     )
     scheduler.add_job(
         weekly_job,
-        CronTrigger(day_of_week="sat", hour=weekly_hour, minute=weekly_minute, timezone=CST),
+        CronTrigger(day_of_week="sat", hour=weekly_hour, minute=weekly_minute, timezone=ET),
         id="weekly_market_report",
         name="Weekly Market Report",
     )
     scheduler.add_job(
         monthly_job,
-        CronTrigger(day=1, hour=monthly_hour, minute=monthly_minute, timezone=CST),
+        CronTrigger(day="last", hour=monthly_hour, minute=monthly_minute, timezone=ET),
         id="monthly_market_report",
         name="Monthly Market Report",
     )
 
     logger.info(
-        "Scheduler started — daily %d:%02d %s ET (trading days), "
-        "weekly Sat %d:%02d AM CST, monthly 1st %d:%02d AM CST",
-        daily_hour % 12 or 12,
-        daily_minute,
-        "PM" if daily_hour >= 12 else "AM",
+        "Scheduler started — daily %d:%02d AM & %d:%02d PM ET (trading days), "
+        "weekly Sat %d:%02d AM ET, monthly last day %d:%02d PM ET",
+        daily_am_hour,
+        daily_am_minute,
+        daily_pm_hour % 12 or 12,
+        daily_pm_minute,
         weekly_hour,
         weekly_minute,
-        monthly_hour,
+        monthly_hour % 12 or 12,
         monthly_minute,
     )
     scheduler.start()

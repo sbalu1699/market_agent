@@ -249,6 +249,56 @@ def _build_fund_table(
     </table>"""
 
 
+def _build_crypto_section(
+    overview: list[dict],
+    crypto_etfs: list[dict],
+    period: str,
+    variant: str,
+) -> str:
+    sort_header = _primary_sort_header(period, variant)
+    overview_rows = ""
+    for rank, c in enumerate(overview, start=1):
+        chg_d, chg_p = _primary_sort_keys(period, variant)
+        d_val = c.get(chg_d) if chg_d else None
+        p_val = c.get(chg_p) if chg_p else None
+        overview_rows += f"""
+        <tr>
+          <td>{rank}</td>
+          <td><strong>{c.get('name', c['ticker'])}</strong></td>
+          <td>{c['ticker']}</td>
+          <td>${c['price']:.2f}</td>
+          {_primary_sort_cell(d_val, p_val)}
+          <td style="color:{_color(c.get('ytd_change_pct'))}">{_fmt_pct(c.get('ytd_change_pct'))}</td>
+        </tr>"""
+
+    overview_table = ""
+    if overview:
+        overview_table = f"""
+    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;width:100%;margin-top:8px">
+      <thead style="background:#1e293b;color:#fff">
+        <tr>
+          <th>#</th><th>Asset</th><th>ETF</th><th>Price</th>
+          <th style="background:#334155">{sort_header}</th>
+          <th>YTD (%)</th>
+        </tr>
+      </thead>
+      <tbody>{overview_rows}</tbody>
+    </table>"""
+
+    etf_table = _build_fund_table(crypto_etfs, "crypto ETF", period, variant)
+    if not crypto_etfs:
+        etf_table = "<p>No crypto ETF data available.</p>"
+
+    return f"""
+      <h2 style="margin-top:32px">Bitcoin &amp; Crypto</h2>
+      <p style="font-size:13px;color:#64748b">
+        Bitcoin and Ethereum via spot ETFs (IBIT, ETHA). Crypto ETF universe ranked by period return (full universe, top 20).
+      </p>
+      {overview_table}
+      <h3 style="margin-top:20px;font-size:16px">Top Crypto ETFs</h3>
+      {etf_table}"""
+
+
 def build_html_report(
     stocks: list[dict],
     sectors: list[dict],
@@ -258,6 +308,8 @@ def build_html_report(
     period: str = "daily",
     variant: str = "day",
     as_of: datetime | date | None = None,
+    crypto_overview: list[dict] | None = None,
+    crypto_etfs: list[dict] | None = None,
 ) -> str:
     """Build a formatted HTML email body (daily, weekly, or monthly)."""
     report_date = _format_report_date(as_of, period)
@@ -314,6 +366,8 @@ def build_html_report(
       <p style="font-size:13px;color:#64748b">Top 20 mutual funds ranked from the mutual fund universe only (index and sector-diverse funds)</p>
       {_build_fund_table(mutual_funds, "mutual fund", period, variant)}
 
+      {_build_crypto_section(crypto_overview or [], crypto_etfs or [], period, variant)}
+
       <p style="margin-top:32px;font-size:12px;color:#94a3b8">
         Data via yfinance &amp; Wikipedia. Not investment advice.
       </p>
@@ -332,6 +386,8 @@ def send_report_email(
     period: str = "daily",
     variant: str = "day",
     as_of: datetime | date | None = None,
+    crypto_overview: list[dict] | None = None,
+    crypto_etfs: list[dict] | None = None,
 ) -> dict:
     """Send the market report via Resend."""
     api_key = os.getenv("RESEND_API_KEY")
@@ -356,6 +412,8 @@ def send_report_email(
     html = build_html_report(
         stocks, sectors, etfs, mutual_funds or [], summary,
         period=period, variant=variant, as_of=as_of,
+        crypto_overview=crypto_overview,
+        crypto_etfs=crypto_etfs,
     )
 
     resend.api_key = api_key
@@ -378,4 +436,150 @@ def send_report_email(
         }
     except Exception as exc:
         logger.error("Resend delivery failed: %s", exc)
+        raise
+
+
+def build_bullion_html_report(
+    market_overview: list[dict],
+    stocks: list[dict],
+    etfs: list[dict],
+    mutual_funds: list[dict],
+    summary: str = "",
+    period: str = "weekly",
+    as_of: datetime | date | None = None,
+) -> str:
+    """HTML report for bullion / precious metals (weekly or monthly)."""
+    report_date = _format_report_date(as_of, period)
+    sent_at = _format_sent_timestamp(datetime.now(), period)
+    as_of_line = (
+        f'<p style="color:#64748b">Data as of {report_date} · Sent {sent_at}</p>'
+    )
+
+    if period == "monthly":
+        title = f"Bullion Market — Monthly ({report_date})"
+        filter_desc = (
+            "Top 20 ranked by ~21-day month change. "
+            "Same stock rules: price ≥ $2, avg volume ≥ 500k, positive month return."
+        )
+    else:
+        title = f"Bullion Market — Weekly ({report_date})"
+        filter_desc = (
+            "Top 20 ranked by 5-day week change. "
+            "Same stock rules: price ≥ $2, avg volume ≥ 500k, positive week return."
+        )
+
+    overview_rows = ""
+    for rank, m in enumerate(market_overview, start=1):
+        chg_d, chg_p = _primary_sort_keys(period)
+        d_val = m.get(chg_d) if chg_d else None
+        p_val = m.get(chg_p) if chg_p else None
+        overview_rows += f"""
+        <tr>
+          <td>{rank}</td>
+          <td><strong>{m.get('name', m['ticker'])}</strong></td>
+          <td>{m['ticker']}</td>
+          <td>${m['price']:.2f}</td>
+          {_primary_sort_cell(d_val, p_val)}
+          <td style="color:{_color(m.get('ytd_change_pct'))}">{_fmt_pct(m.get('ytd_change_pct'))}</td>
+          <td style="color:{_color(m.get('return_1m'))}">{_fmt_pct(m.get('return_1m'))}</td>
+        </tr>"""
+
+    sort_header = _primary_sort_header(period)
+    overview_table = f"""
+    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;width:100%">
+      <thead style="background:#1e293b;color:#fff">
+        <tr>
+          <th>#</th><th>Metal</th><th>ETF</th><th>Price</th>
+          <th style="background:#334155">{sort_header}</th>
+          <th>YTD (%)</th><th>1M Return</th>
+        </tr>
+      </thead>
+      <tbody>{overview_rows}</tbody>
+    </table>"""
+
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <body style="font-family:Arial,sans-serif;color:#1e293b;max-width:900px;margin:auto">
+      <h1 style="color:#0f172a">{title}</h1>
+      {as_of_line}
+      {f'<p><em>{summary}</em></p>' if summary else ''}
+
+      <h2>Precious Metals Overview</h2>
+      <p style="font-size:13px;color:#64748b">
+        Gold, silver, platinum, and palladium via physical bullion ETFs (GLD, SLV, PPLT, PALL)
+      </p>
+      {overview_table}
+
+      <h2 style="margin-top:32px">Top Bullion Stocks</h2>
+      <p style="font-size:13px;color:#64748b">{filter_desc}</p>
+      {_build_stocks_table(stocks, period)}
+
+      <h2 style="margin-top:32px">Top Bullion ETFs</h2>
+      <p style="font-size:13px;color:#64748b">{filter_desc}</p>
+      {_build_fund_table(etfs, "bullion ETF", period)}
+
+      <h2 style="margin-top:32px">Top Bullion Mutual Funds</h2>
+      <p style="font-size:13px;color:#64748b">Top 20 from bullion mutual fund universe; price ≥ $2 and positive period return (volume not applied — unavailable for funds on yfinance)</p>
+      {_build_fund_table(mutual_funds, "bullion mutual fund", period)}
+
+      <p style="margin-top:32px;font-size:12px;color:#94a3b8">
+        Data via yfinance. Bullion commodities: gold, silver, platinum, palladium. Not investment advice.
+      </p>
+    </body>
+    </html>
+    """
+
+
+def send_bullion_report_email(
+    market_overview: list[dict],
+    stocks: list[dict],
+    etfs: list[dict],
+    mutual_funds: list[dict] | None = None,
+    summary: str = "",
+    subject: str | None = None,
+    period: str = "weekly",
+    as_of: datetime | date | None = None,
+) -> dict:
+    """Send bullion market report via Resend."""
+    api_key = os.getenv("RESEND_API_KEY")
+    from_email = os.getenv("EMAIL_FROM")
+    to_email = os.getenv("EMAIL_TO")
+
+    if not all([api_key, from_email, to_email]):
+        raise ValueError("Missing RESEND_API_KEY, EMAIL_FROM, or EMAIL_TO in environment")
+
+    if subject is None:
+        as_of_dt = _to_et(as_of or datetime.now(ET))
+        date_str = as_of_dt.strftime("%Y-%m-%d")
+        if period == "monthly":
+            subject = f"Bullion market — Monthly ({as_of_dt.strftime('%Y-%m')})"
+        else:
+            subject = f"Bullion market — Weekly ({date_str})"
+
+    html = build_bullion_html_report(
+        market_overview, stocks, etfs, mutual_funds or [],
+        summary, period=period, as_of=as_of,
+    )
+
+    resend.api_key = api_key
+
+    try:
+        response = resend.Emails.send(
+            {
+                "from": from_email,
+                "to": [to_email],
+                "subject": subject,
+                "html": html,
+            }
+        )
+        return {
+            "status": "sent",
+            "id": response.get("id") if isinstance(response, dict) else getattr(response, "id", None),
+            "to": to_email,
+            "period": period,
+            "report": "bullion",
+        }
+    except Exception as exc:
+        logger.error("Resend bullion delivery failed: %s", exc)
         raise

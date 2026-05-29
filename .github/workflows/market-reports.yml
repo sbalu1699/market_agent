@@ -1,0 +1,102 @@
+# Market agent — scheduled email reports (GitHub Actions)
+#
+# Required repository secrets:
+#   RESEND_API_KEY  — Resend API key
+#   EMAIL_FROM        — e.g. "Market Agent <reports@yourdomain.com>"
+#   EMAIL_TO          — recipient address
+#
+# Optional secrets (defaults shown):
+#   AGENT_MODE=pipeline
+#
+# Cron uses UTC. Each slot has two cron lines (EDT + EST). scripts/scheduled_run.py
+# verifies the current Eastern time is within ±20 minutes of the target before sending.
+
+name: Market Reports
+
+on:
+  schedule:
+    # Daily AM — 11:30 ET (15:30 UTC EDT / 16:30 UTC EST), Mon–Fri
+    - cron: "30 15 * * 1-5"
+    - cron: "30 16 * * 1-5"
+    # Daily PM — 19:04 ET (23:04 UTC EDT / 00:04 UTC EST next day)
+    - cron: "4 23 * * 1-5"
+    - cron: "4 0 * * 2-6"
+    # Weekly — Saturday 10:06 ET (14:06 UTC EDT / 15:06 UTC EST)
+    - cron: "6 14 * * 6"
+    - cron: "6 15 * * 6"
+    # Monthly — last day 19:00 ET (23:00 UTC EDT; 00:00 UTC next day EST)
+    - cron: "0 23 28-31 * *"
+    - cron: "0 0 1 * *"
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: "Report slot to run"
+        required: true
+        type: choice
+        options:
+          - daily-am
+          - daily-pm
+          - weekly
+          - monthly
+      force:
+        description: "Skip ET time/day gates (manual test)"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Determine slot
+        id: slot
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "name=${{ inputs.slot }}" >> "$GITHUB_OUTPUT"
+            echo "force=${{ inputs.force }}" >> "$GITHUB_OUTPUT"
+          else
+            H=$(date -u +%H)
+            M=$(date -u +%M)
+            DOW=$(date -u +%u)
+            DOM=$(date -u +%d)
+            # Match UTC cron windows to slot names (ET gating happens in Python)
+            if { [ "$H" = "15" ] || [ "$H" = "16" ]; } && [ "$M" = "30" ] && [ "$DOW" -le 5 ]; then
+              echo "name=daily-am" >> "$GITHUB_OUTPUT"
+            elif { [ "$H" = "23" ] && [ "$M" = "04" ] && [ "$DOW" -le 5 ]; } || \
+                 { [ "$H" = "00" ] && [ "$M" = "04" ] && [ "$DOW" -ge 2 ]; }; then
+              echo "name=daily-pm" >> "$GITHUB_OUTPUT"
+            elif { [ "$H" = "14" ] || [ "$H" = "15" ]; } && [ "$M" = "06" ] && [ "$DOW" = "6" ]; then
+              echo "name=weekly" >> "$GITHUB_OUTPUT"
+            elif { [ "$H" = "23" ] && [ "$M" = "00" ] && [ "$DOM" -ge 28 ]; } || \
+                 { [ "$H" = "00" ] && [ "$M" = "00" ] && [ "$DOM" = "01" ]; }; then
+              echo "name=monthly" >> "$GITHUB_OUTPUT"
+            else
+              echo "name=unknown" >> "$GITHUB_OUTPUT"
+            fi
+            echo "force=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run market pipeline
+        if: steps.slot.outputs.name != 'unknown'
+        env:
+          AGENT_MODE: pipeline
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: |
+          FORCE_FLAG=""
+          if [ "${{ steps.slot.outputs.force }}" = "true" ]; then
+            FORCE_FLAG="--force"
+          fi
+          python scripts/scheduled_run.py "${{ steps.slot.outputs.name }}" $FORCE_FLAG

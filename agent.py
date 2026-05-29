@@ -34,7 +34,29 @@ from mcp_server.tools.analyzer import (
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from mcp_server.tools.emailer import send_report_email
+from mcp_server.tools.crypto import (
+    CRYPTO_ETF_UNIVERSE,
+    CRYPTO_OVERVIEW_UNIVERSE,
+    analyze_top_crypto_etfs,
+    analyze_top_crypto_etfs_momentum,
+    analyze_top_crypto_etfs_monthly,
+    analyze_top_crypto_etfs_weekly,
+    get_crypto_overview,
+)
+from mcp_server.tools.bullion import (
+    BULLION_ETF_UNIVERSE,
+    BULLION_MARKET_UNIVERSE,
+    BULLION_MUTUAL_FUND_UNIVERSE,
+    BULLION_STOCK_UNIVERSE,
+    analyze_bullion_etfs_monthly,
+    analyze_bullion_etfs_weekly,
+    analyze_bullion_mutual_funds_monthly,
+    analyze_bullion_mutual_funds_weekly,
+    analyze_bullion_stocks_monthly,
+    analyze_bullion_stocks_weekly,
+    get_bullion_market_overview,
+)
+from mcp_server.tools.emailer import send_bullion_report_email, send_report_email
 from mcp_server.tools.market_data import (
     fetch_sp500_universe,
     fetch_stock_history,
@@ -56,6 +78,14 @@ logging.basicConfig(
 logger = logging.getLogger("market-agent")
 
 ET = ZoneInfo("America/New_York")
+
+
+def _crypto_tickers() -> list[str]:
+    return list(
+        dict.fromkeys(
+            [*CRYPTO_OVERVIEW_UNIVERSE.keys(), *CRYPTO_ETF_UNIVERSE.keys()]
+        )
+    )
 
 
 def _report_as_of(*histories: dict) -> datetime:
@@ -250,13 +280,16 @@ def run_pipeline() -> dict:
     stock_history = fetch_stock_history(universe["Symbol"].tolist())
     etf_history = fetch_stock_history(ETF_UNIVERSE)
     mf_history = fetch_stock_history(list(MUTUAL_FUND_UNIVERSE.keys()))
-    as_of = _report_as_of(stock_history, etf_history, mf_history)
+    crypto_history = fetch_stock_history(_crypto_tickers())
+    as_of = _report_as_of(stock_history, etf_history, mf_history, crypto_history)
 
     # --- Report 1: day-change ranking (current) ---
     stocks = analyze_top_stocks(universe, top_n=20, history=stock_history)
     sectors = get_sector_breakdown(universe, history=stock_history)
     etfs = analyze_top_etfs(top_n=20, history=etf_history)
     mutual_funds = analyze_top_mutual_funds(top_n=20, history=mf_history)
+    crypto_overview = get_crypto_overview("daily", history=crypto_history, variant="day")
+    crypto_etfs = analyze_top_crypto_etfs(top_n=20, history=crypto_history)
 
     top_mover = stocks[0]["ticker"] if stocks else "N/A"
     best_sector = sectors[0]["sector"] if sectors else "N/A"
@@ -273,6 +306,7 @@ def run_pipeline() -> dict:
     email_day = send_report_email(
         stocks, sectors, etfs, mutual_funds,
         summary=summary, period="daily", variant="day", as_of=as_of,
+        crypto_overview=crypto_overview, crypto_etfs=crypto_etfs,
     )
     logger.info("Daily (day-change) report sent.")
 
@@ -281,6 +315,10 @@ def run_pipeline() -> dict:
     sectors_mom = get_sector_breakdown_momentum(universe, history=stock_history)
     etfs_mom = analyze_top_etfs_momentum(top_n=20, history=etf_history)
     mutual_mom = analyze_top_mutual_funds_momentum(top_n=20, history=mf_history)
+    crypto_overview_mom = get_crypto_overview(
+        "daily", history=crypto_history, variant="momentum"
+    )
+    crypto_etfs_mom = analyze_top_crypto_etfs_momentum(top_n=20, history=crypto_history)
 
     top_mom = stocks_mom[0]["ticker"] if stocks_mom else "N/A"
     best_sector_mom = sectors_mom[0]["sector"] if sectors_mom else "N/A"
@@ -303,6 +341,8 @@ def run_pipeline() -> dict:
         period="daily",
         variant="momentum",
         as_of=as_of,
+        crypto_overview=crypto_overview_mom,
+        crypto_etfs=crypto_etfs_mom,
     )
     logger.info("Daily (momentum) report sent.")
 
@@ -331,12 +371,15 @@ def run_weekly_pipeline() -> dict:
     stock_history = fetch_stock_history(universe["Symbol"].tolist())
     etf_history = fetch_stock_history(ETF_UNIVERSE)
     mf_history = fetch_stock_history(list(MUTUAL_FUND_UNIVERSE.keys()))
-    as_of = _report_as_of(stock_history, etf_history, mf_history)
+    crypto_history = fetch_stock_history(_crypto_tickers())
+    as_of = _report_as_of(stock_history, etf_history, mf_history, crypto_history)
 
     stocks = analyze_top_stocks_weekly(universe, top_n=20, history=stock_history)
     sectors = get_sector_breakdown_weekly(universe, history=stock_history)
     etfs = analyze_top_etfs_weekly(top_n=20, history=etf_history)
     mutual_funds = analyze_top_mutual_funds_weekly(top_n=20, history=mf_history)
+    crypto_overview = get_crypto_overview("weekly", history=crypto_history)
+    crypto_etfs = analyze_top_crypto_etfs_weekly(top_n=20, history=crypto_history)
 
     top_mover = stocks[0]["ticker"] if stocks else "N/A"
     best_sector = sectors[0]["sector"] if sectors else "N/A"
@@ -350,13 +393,16 @@ def run_weekly_pipeline() -> dict:
     )
 
     email_result = send_report_email(
-        stocks, sectors, etfs, mutual_funds, summary=summary, period="weekly", as_of=as_of
+        stocks, sectors, etfs, mutual_funds, summary=summary, period="weekly", as_of=as_of,
+        crypto_overview=crypto_overview, crypto_etfs=crypto_etfs,
     )
     return {
         "stocks": stocks,
         "sectors": sectors,
         "etfs": etfs,
         "mutual_funds": mutual_funds,
+        "crypto_overview": crypto_overview,
+        "crypto_etfs": crypto_etfs,
         "summary": summary,
         "email": email_result,
     }
@@ -369,12 +415,15 @@ def run_monthly_pipeline() -> dict:
     stock_history = fetch_stock_history(universe["Symbol"].tolist())
     etf_history = fetch_stock_history(ETF_UNIVERSE)
     mf_history = fetch_stock_history(list(MUTUAL_FUND_UNIVERSE.keys()))
-    as_of = _report_as_of(stock_history, etf_history, mf_history)
+    crypto_history = fetch_stock_history(_crypto_tickers())
+    as_of = _report_as_of(stock_history, etf_history, mf_history, crypto_history)
 
     stocks = analyze_top_stocks_monthly(universe, top_n=20, history=stock_history)
     sectors = get_sector_breakdown_monthly(universe, history=stock_history)
     etfs = analyze_top_etfs_monthly(top_n=20, history=etf_history)
     mutual_funds = analyze_top_mutual_funds_monthly(top_n=20, history=mf_history)
+    crypto_overview = get_crypto_overview("monthly", history=crypto_history)
+    crypto_etfs = analyze_top_crypto_etfs_monthly(top_n=20, history=crypto_history)
 
     top_mover = stocks[0]["ticker"] if stocks else "N/A"
     best_sector = sectors[0]["sector"] if sectors else "N/A"
@@ -388,11 +437,108 @@ def run_monthly_pipeline() -> dict:
     )
 
     email_result = send_report_email(
-        stocks, sectors, etfs, mutual_funds, summary=summary, period="monthly", as_of=as_of
+        stocks, sectors, etfs, mutual_funds, summary=summary, period="monthly", as_of=as_of,
+        crypto_overview=crypto_overview, crypto_etfs=crypto_etfs,
     )
     return {
         "stocks": stocks,
         "sectors": sectors,
+        "etfs": etfs,
+        "mutual_funds": mutual_funds,
+        "crypto_overview": crypto_overview,
+        "crypto_etfs": crypto_etfs,
+        "summary": summary,
+        "email": email_result,
+    }
+
+
+def run_bullion_weekly_pipeline() -> dict:
+    """Weekly bullion report — precious metals, miners, ETFs, and mutual funds."""
+    logger.info("Running bullion weekly pipeline...")
+    market_tickers = list(BULLION_MARKET_UNIVERSE.keys())
+    stock_tickers = list(BULLION_STOCK_UNIVERSE.keys())
+    etf_tickers = list(BULLION_ETF_UNIVERSE.keys())
+    mf_tickers = list(BULLION_MUTUAL_FUND_UNIVERSE.keys())
+    all_tickers = list(dict.fromkeys([*market_tickers, *stock_tickers, *etf_tickers, *mf_tickers]))
+
+    history = fetch_stock_history(all_tickers)
+    market_history = {t: history[t] for t in market_tickers if t in history}
+    stock_history = {t: history[t] for t in stock_tickers if t in history}
+    etf_history = {t: history[t] for t in etf_tickers if t in history}
+    mf_history = {t: history[t] for t in mf_tickers if t in history}
+    as_of = _report_as_of(history)
+
+    overview = get_bullion_market_overview("weekly", history=market_history)
+    stocks = analyze_bullion_stocks_weekly(top_n=20, history=stock_history)
+    etfs = analyze_bullion_etfs_weekly(top_n=20, history=etf_history)
+    mutual_funds = analyze_bullion_mutual_funds_weekly(top_n=20, history=mf_history)
+
+    top_metal = overview[0]["name"] if overview else "N/A"
+    top_stock = stocks[0]["ticker"] if stocks else "N/A"
+    top_etf = etfs[0]["ticker"] if etfs else "N/A"
+    top_mf = mutual_funds[0]["ticker"] if mutual_funds else "N/A"
+    metal_pct = overview[0].get("week_change_pct") if overview else None
+    summary = (
+        f"Leading metal: {top_metal}"
+        f"{f' ({metal_pct:+.2f}%)' if metal_pct is not None else ''}. "
+        f"Top miner: {top_stock}. Top bullion ETF: {top_etf}. Top fund: {top_mf}. "
+        f"{len(stocks)} stocks, {len(etfs)} ETFs, {len(mutual_funds)} funds met weekly criteria."
+    )
+
+    email_result = send_bullion_report_email(
+        overview, stocks, etfs, mutual_funds,
+        summary=summary, period="weekly", as_of=as_of,
+    )
+    return {
+        "market_overview": overview,
+        "stocks": stocks,
+        "etfs": etfs,
+        "mutual_funds": mutual_funds,
+        "summary": summary,
+        "email": email_result,
+    }
+
+
+def run_bullion_monthly_pipeline() -> dict:
+    """Monthly bullion report — precious metals, miners, ETFs, and mutual funds."""
+    logger.info("Running bullion monthly pipeline...")
+    market_tickers = list(BULLION_MARKET_UNIVERSE.keys())
+    stock_tickers = list(BULLION_STOCK_UNIVERSE.keys())
+    etf_tickers = list(BULLION_ETF_UNIVERSE.keys())
+    mf_tickers = list(BULLION_MUTUAL_FUND_UNIVERSE.keys())
+    all_tickers = list(dict.fromkeys([*market_tickers, *stock_tickers, *etf_tickers, *mf_tickers]))
+
+    history = fetch_stock_history(all_tickers)
+    market_history = {t: history[t] for t in market_tickers if t in history}
+    stock_history = {t: history[t] for t in stock_tickers if t in history}
+    etf_history = {t: history[t] for t in etf_tickers if t in history}
+    mf_history = {t: history[t] for t in mf_tickers if t in history}
+    as_of = _report_as_of(history)
+
+    overview = get_bullion_market_overview("monthly", history=market_history)
+    stocks = analyze_bullion_stocks_monthly(top_n=20, history=stock_history)
+    etfs = analyze_bullion_etfs_monthly(top_n=20, history=etf_history)
+    mutual_funds = analyze_bullion_mutual_funds_monthly(top_n=20, history=mf_history)
+
+    top_metal = overview[0]["name"] if overview else "N/A"
+    top_stock = stocks[0]["ticker"] if stocks else "N/A"
+    top_etf = etfs[0]["ticker"] if etfs else "N/A"
+    top_mf = mutual_funds[0]["ticker"] if mutual_funds else "N/A"
+    metal_pct = overview[0].get("month_change_pct") if overview else None
+    summary = (
+        f"Leading metal: {top_metal}"
+        f"{f' ({metal_pct:+.2f}%)' if metal_pct is not None else ''}. "
+        f"Top miner: {top_stock}. Top bullion ETF: {top_etf}. Top fund: {top_mf}. "
+        f"{len(stocks)} stocks, {len(etfs)} ETFs, {len(mutual_funds)} funds met monthly criteria."
+    )
+
+    email_result = send_bullion_report_email(
+        overview, stocks, etfs, mutual_funds,
+        summary=summary, period="monthly", as_of=as_of,
+    )
+    return {
+        "market_overview": overview,
+        "stocks": stocks,
         "etfs": etfs,
         "mutual_funds": mutual_funds,
         "summary": summary,
@@ -409,18 +555,35 @@ if __name__ == "__main__":
     if mode == "pipeline":
         if report_type == "weekly":
             result = run_weekly_pipeline()
+            bullion = run_bullion_weekly_pipeline()
         elif report_type == "monthly":
             result = run_monthly_pipeline()
+            bullion = run_bullion_monthly_pipeline()
+        elif report_type == "bullion-weekly":
+            result = run_bullion_weekly_pipeline()
+            bullion = None
+        elif report_type == "bullion-monthly":
+            result = run_bullion_monthly_pipeline()
+            bullion = None
         else:
             result = run_pipeline()
-        print(json.dumps({
+            bullion = None
+        output = {
             "email": result["email"],
             "email_momentum": result.get("momentum", {}).get("email"),
-            "stock_count": len(result["stocks"]),
+            "stock_count": len(result.get("stocks", [])),
             "stock_count_momentum": len(result.get("momentum", {}).get("stocks", [])),
-            "etf_count": len(result["etfs"]),
-            "mutual_fund_count": len(result["mutual_funds"]),
+            "etf_count": len(result.get("etfs", [])),
+            "mutual_fund_count": len(result.get("mutual_funds", [])),
             "report_type": report_type,
-        }, indent=2))
+        }
+        if bullion:
+            output["bullion_email"] = bullion["email"]
+            output["bullion_stock_count"] = len(bullion["stocks"])
+            output["bullion_etf_count"] = len(bullion["etfs"])
+            output["bullion_mutual_fund_count"] = len(bullion.get("mutual_funds", []))
+        if report_type.startswith("bullion"):
+            output["bullion_mutual_fund_count"] = len(result.get("mutual_funds", []))
+        print(json.dumps(output, indent=2))
     else:
         run_agent()

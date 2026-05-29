@@ -4,12 +4,20 @@ globs: ["**/*.py"]
 alwaysApply: false
 ---
 
-## Email Schedule
-- **Daily** — 7:04 PM ET on trading days — **two emails back-to-back**:
-  1. **Day ranking** — sort by day change; stock filters: positive 1M/2M, above MA20 & MA50
-  2. **Momentum ranking** — sort by 1M return; stock filters: positive 1M/2M, above MA20 & MA60
-- **Weekly** — Saturday 10:06 AM CST
-- **Monthly** — 1st of each month 10:06 AM CST
+## Email Schedule (all times **Eastern / ET**)
+- **Daily** — **11:30 AM ET** and **7:04 PM ET** on trading days — **two emails per run** (day + momentum) → **4 daily emails** total
+- **Weekly** — **Saturday 10:06 AM ET** — broad market + bullion email
+- **Monthly** — **last day of month, 7:00 PM ET** — broad market + bullion email
+
+## Bullion reports (weekly & monthly)
+- Separate email: `Bullion market — Weekly/Monthly`
+- **No crypto section** in bullion emails — crypto is broad-market only
+- **Overview:** Gold (GLD), Silver (SLV), Platinum (PPLT), Palladium (PALL)
+- **Stocks:** `BULLION_STOCK_UNIVERSE` — miners & royalty names
+- **ETFs:** `BULLION_ETF_UNIVERSE` — physical, miners, diversified precious-metal ETFs
+- **Mutual funds:** `BULLION_MUTUAL_FUND_UNIVERSE` — gold/precious metals funds; price ≥ $2 + positive period (volume skipped — yfinance reports 0 for funds)
+- **Same filters as S&P 500 stocks:** price ≥ $2, avg volume ≥ 500k, positive week (weekly) or month (monthly)
+- Sort by period return (`week_change_pct` / `month_change_pct`)
 
 ## Change Columns
 - **Primary Sort** — combined `$ and %` for the report period (Day / Week / Month); this is the ranking column
@@ -58,10 +66,28 @@ alwaysApply: false
 - Stock **filters** (liquidity, MAs, positive period) gate eligibility; **sort** uses the period metric above.
 - ETFs/funds: no positivity filter — rank full universe, take top 20.
 
+## Bitcoin & crypto (broad market emails only)
+- Appended **after mutual funds** in stocks/broad market HTML — not in bullion emails
+- **Overview:** Bitcoin (IBIT), Ethereum (ETHA) via spot ETFs
+- **Crypto ETFs:** `CRYPTO_ETF_UNIVERSE` — spot BTC/ETH, miners, thematic (BITQ, BLOK, etc.)
+- Same rules as broad ETFs: rank full universe, top 20, no positivity filter
+- Sort key matches report period (day / week / month / momentum)
+
+## GitHub Actions automation (Option 4)
+- Workflow: `.github/workflows/market-reports.yml`
+- Entrypoint: `python scripts/scheduled_run.py <slot>` with ET gating (±20 min)
+- Slots: `daily-am`, `daily-pm`, `weekly`, `monthly`
+- Secrets: `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_TO`
+- Manual run: Actions → Market Reports → Run workflow
+
 ## Commands
 ```bash
 AGENT_MODE=pipeline python agent.py           # daily
-AGENT_MODE=pipeline python agent.py weekly    # weekly
-AGENT_MODE=pipeline python agent.py monthly   # monthly
-python scheduler.py                           # all three schedules
+AGENT_MODE=pipeline python agent.py weekly          # broad + bullion weekly
+AGENT_MODE=pipeline python agent.py monthly         # broad + bullion monthly
+AGENT_MODE=pipeline python agent.py bullion-weekly  # bullion only
+AGENT_MODE=pipeline python agent.py bullion-monthly # bullion only
+python scheduler.py                           # all three schedules (local)
+python scripts/scheduled_run.py daily-am      # GitHub Actions / cron slot
+python scripts/scheduled_run.py weekly --force  # manual test, skip ET gates
 ```
