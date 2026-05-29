@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict
 
 from .analyzer import StockMetrics, _compute_metrics
-from .market_data import fetch_stock_history
+from .market_data import attach_expense_ratios, fetch_stock_history
 
 # Spot Bitcoin & Ethereum proxies for overview row
 CRYPTO_OVERVIEW_UNIVERSE: dict[str, str] = {
@@ -70,7 +70,7 @@ def _rank_top(
     top_n: int,
     history: dict | None = None,
 ) -> list[dict]:
-    return _collect_all(tickers, sort_key, history)[:top_n]
+    return attach_expense_ratios(_collect_all(tickers, sort_key, history)[:top_n])
 
 
 def get_crypto_overview(

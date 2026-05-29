@@ -13,6 +13,7 @@ from .market_data import (
     TRADING_DAYS_2M,
     TRADING_DAYS_6M,
     TRADING_DAYS_52W,
+    attach_expense_ratios,
     calc_ytd_change,
     fetch_stock_history,
 )
@@ -367,7 +368,7 @@ def _analyze_ticker_list(
             logger.debug("Analysis skipped for %s: %s", ticker, exc)
 
     results.sort(key=lambda r: r.get(sort_key) or -999, reverse=True)
-    return results[:top_n]
+    return attach_expense_ratios(results[:top_n])
 
 
 def analyze_top_etfs(top_n: int = 20, history: dict | None = None) -> list[dict]:

@@ -50,6 +50,12 @@ def _fmt_pct(value: float | None) -> str:
     return f"{sign}{value:.2f}%"
 
 
+def _fmt_expense_ratio(value: float | None) -> str:
+    if value is None:
+        return "N/A"
+    return f"{value:.2f}%"
+
+
 def _fmt_price(value: float | None) -> str:
     if value is None:
         return "N/A"
@@ -296,6 +302,7 @@ def _build_fund_table(
           <td style="color:{_color(f.get('ytd_change_pct'))}">{_fmt_pct(f.get('ytd_change_pct'))}</td>
           <td style="color:{_color(f['return_1m'])}">{_fmt_pct(f['return_1m'])}</td>
           <td style="color:{_color(f['return_2m'])}">{_fmt_pct(f['return_2m'])}</td>
+          <td>{_fmt_expense_ratio(f.get('expense_ratio'))}</td>
           <td>{_fmt_price(f.get('week52_high'))}</td>
           <td>{_fmt_price(f.get('week52_low'))}</td>
         </tr>"""
@@ -307,7 +314,8 @@ def _build_fund_table(
           <th>#</th><th>Ticker</th><th>Name</th><th>Price</th>
           <th style="background:#334155">{sort_header}</th>
           <th>YTD ($)</th><th>YTD (%)</th>
-          <th>1M Return</th><th>2M Return</th><th>52W High</th><th>52W Low</th>
+          <th>1M Return</th><th>2M Return</th><th>Exp Ratio</th>
+          <th>52W High</th><th>52W Low</th>
         </tr>
       </thead>
       <tbody>{rows}</tbody>

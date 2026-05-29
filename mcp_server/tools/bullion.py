@@ -11,7 +11,7 @@ from .analyzer import (
     _passes_monthly_filters,
     _passes_weekly_filters,
 )
-from .market_data import fetch_stock_history
+from .market_data import attach_expense_ratios, fetch_stock_history
 
 # Core bullion market — physical precious metal ETFs (always shown in overview)
 BULLION_MARKET_UNIVERSE: dict[str, str] = {
@@ -214,50 +214,58 @@ def analyze_bullion_stocks_monthly(
 def analyze_bullion_etfs_weekly(
     top_n: int = 20, history: dict | None = None
 ) -> list[dict]:
-    return _collect_filtered(
-        BULLION_ETF_UNIVERSE,
-        _passes_weekly_filters,
-        "week_change_pct",
-        top_n,
-        history,
-        sector="Bullion ETF",
+    return attach_expense_ratios(
+        _collect_filtered(
+            BULLION_ETF_UNIVERSE,
+            _passes_weekly_filters,
+            "week_change_pct",
+            top_n,
+            history,
+            sector="Bullion ETF",
+        )
     )
 
 
 def analyze_bullion_etfs_monthly(
     top_n: int = 20, history: dict | None = None
 ) -> list[dict]:
-    return _collect_filtered(
-        BULLION_ETF_UNIVERSE,
-        _passes_monthly_filters,
-        "month_change_pct",
-        top_n,
-        history,
-        sector="Bullion ETF",
+    return attach_expense_ratios(
+        _collect_filtered(
+            BULLION_ETF_UNIVERSE,
+            _passes_monthly_filters,
+            "month_change_pct",
+            top_n,
+            history,
+            sector="Bullion ETF",
+        )
     )
 
 
 def analyze_bullion_mutual_funds_weekly(
     top_n: int = 20, history: dict | None = None
 ) -> list[dict]:
-    return _collect_filtered(
-        BULLION_MUTUAL_FUND_UNIVERSE,
-        _passes_weekly_fund_filters,
-        "week_change_pct",
-        top_n,
-        history,
-        sector="Bullion Fund",
+    return attach_expense_ratios(
+        _collect_filtered(
+            BULLION_MUTUAL_FUND_UNIVERSE,
+            _passes_weekly_fund_filters,
+            "week_change_pct",
+            top_n,
+            history,
+            sector="Bullion Fund",
+        )
     )
 
 
 def analyze_bullion_mutual_funds_monthly(
     top_n: int = 20, history: dict | None = None
 ) -> list[dict]:
-    return _collect_filtered(
-        BULLION_MUTUAL_FUND_UNIVERSE,
-        _passes_monthly_fund_filters,
-        "month_change_pct",
-        top_n,
-        history,
-        sector="Bullion Fund",
+    return attach_expense_ratios(
+        _collect_filtered(
+            BULLION_MUTUAL_FUND_UNIVERSE,
+            _passes_monthly_fund_filters,
+            "month_change_pct",
+            top_n,
+            history,
+            sector="Bullion Fund",
+        )
     )

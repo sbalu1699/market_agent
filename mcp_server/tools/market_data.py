@@ -147,3 +147,55 @@ def calc_ytd_change(close: pd.Series) -> tuple[float | None, float | None]:
         return None, None
 
     return price - start, (price / start - 1) * 100
+
+
+def _normalize_expense_ratio(raw: object) -> float | None:
+    """Convert yfinance annualReportExpenseRatio decimal to percent."""
+    if raw is None:
+        return None
+    try:
+        val = float(raw)
+    except (TypeError, ValueError):
+        return None
+    if val <= 0:
+        return None
+    return val * 100
+
+
+def fetch_expense_ratio(ticker: str) -> float | None:
+    """Fetch net/annual expense ratio for an ETF or mutual fund (returns percent)."""
+    try:
+        info = yf.Ticker(ticker).info or {}
+        if info.get("netExpenseRatio") is not None:
+            val = float(info["netExpenseRatio"])
+            return val if val > 0 else None
+        if info.get("annualReportExpenseRatio") is not None:
+            return _normalize_expense_ratio(info["annualReportExpenseRatio"])
+        if info.get("expenseRatio") is not None:
+            val = float(info["expenseRatio"])
+            return val * 100 if val < 0.05 else val if val > 0 else None
+        if info.get("fundExpenseRatio") is not None:
+            val = float(info["fundExpenseRatio"])
+            return val * 100 if val < 0.05 else val if val > 0 else None
+        return None
+    except Exception as exc:
+        logger.debug("Expense ratio unavailable for %s: %s", ticker, exc)
+        return None
+
+
+def fetch_expense_ratios(tickers: list[str]) -> dict[str, float | None]:
+    """Batch expense ratios for fund tickers."""
+    return {ticker: fetch_expense_ratio(ticker) for ticker in tickers}
+
+
+def attach_expense_ratios(funds: list[dict]) -> list[dict]:
+    """Add expense_ratio (percent) to fund result dicts."""
+    if not funds:
+        return funds
+    ratios = fetch_expense_ratios([f["ticker"] for f in funds])
+    enriched: list[dict] = []
+    for fund in funds:
+        row = dict(fund)
+        row["expense_ratio"] = ratios.get(fund["ticker"])
+        enriched.append(row)
+    return enriched
