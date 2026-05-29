@@ -110,6 +110,8 @@ def _build_forex_table(forex: list[dict], period: str = "weekly") -> str:
           {_forex_primary_sort_cell(ticker, d_val, p_val)}
           <td style="color:{_color(fx.get('ytd_change_pct'))}">{_fmt_pct(fx.get('ytd_change_pct'))}</td>
           <td style="color:{_color(fx.get('return_1m'))}">{_fmt_pct(fx.get('return_1m'))}</td>
+          <td style="color:{_color(fx.get('return_2m'))}">{_fmt_pct(fx.get('return_2m'))}</td>
+          <td style="color:{_color(fx.get('return_6m'))}">{_fmt_pct(fx.get('return_6m'))}</td>
         </tr>"""
 
     return f"""
@@ -118,7 +120,7 @@ def _build_forex_table(forex: list[dict], period: str = "weekly") -> str:
         <tr>
           <th>#</th><th>Pair</th><th>Rate</th>
           <th style="background:#334155">{sort_header}</th>
-          <th>YTD (%)</th><th>1M Return</th>
+          <th>YTD (%)</th><th>1M Return</th><th>2M Return</th><th>6M Return</th>
         </tr>
       </thead>
       <tbody>{rows}</tbody>
@@ -545,6 +547,8 @@ def build_bullion_html_report(
           {_primary_sort_cell(d_val, p_val)}
           <td style="color:{_color(m.get('ytd_change_pct'))}">{_fmt_pct(m.get('ytd_change_pct'))}</td>
           <td style="color:{_color(m.get('return_1m'))}">{_fmt_pct(m.get('return_1m'))}</td>
+          <td style="color:{_color(m.get('return_2m'))}">{_fmt_pct(m.get('return_2m'))}</td>
+          <td style="color:{_color(m.get('return_6m'))}">{_fmt_pct(m.get('return_6m'))}</td>
         </tr>"""
 
     sort_header = _primary_sort_header(period)
@@ -554,7 +558,7 @@ def build_bullion_html_report(
         <tr>
           <th>#</th><th>Metal</th><th>ETF</th><th>Price</th>
           <th style="background:#334155">{sort_header}</th>
-          <th>YTD (%)</th><th>1M Return</th>
+          <th>YTD (%)</th><th>1M Return</th><th>2M Return</th><th>6M Return</th>
         </tr>
       </thead>
       <tbody>{overview_rows}</tbody>

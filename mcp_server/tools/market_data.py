@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 WIKI_SP500_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
 TRADING_DAYS_1M = 21
 TRADING_DAYS_2M = 42
+TRADING_DAYS_6M = 126
 TRADING_DAYS_1W = 5
 TRADING_DAYS_52W = 252
 HISTORY_PERIOD = "1y"

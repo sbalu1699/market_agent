@@ -11,6 +11,7 @@ from .market_data import (
     TRADING_DAYS_1M,
     TRADING_DAYS_1W,
     TRADING_DAYS_2M,
+    TRADING_DAYS_6M,
     TRADING_DAYS_52W,
     calc_ytd_change,
     fetch_stock_history,
@@ -94,6 +95,7 @@ class StockMetrics:
     ytd_change_pct: float | None
     return_1m: float
     return_2m: float
+    return_6m: float | None
     week52_high: float | None
     week52_low: float | None
     ma20: float
@@ -186,6 +188,7 @@ def _compute_metrics(
 
         return_1m = _calc_return(close, TRADING_DAYS_1M)
         return_2m = _calc_return(close, TRADING_DAYS_2M)
+        return_6m = _calc_return(close, TRADING_DAYS_6M)
         if return_1m is None or return_2m is None:
             return None
 
@@ -206,6 +209,7 @@ def _compute_metrics(
             ytd_change_pct=ytd_change_pct,
             return_1m=return_1m,
             return_2m=return_2m,
+            return_6m=return_6m,
             week52_high=week52_high,
             week52_low=week52_low,
             ma20=ma20,
