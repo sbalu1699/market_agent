@@ -50,8 +50,8 @@ def _slot_config(slot: str) -> dict:
             "minute": int(os.getenv("SCHEDULE_MINUTE", "4")),
         },
         "weekly": {
-            "hour": int(os.getenv("WEEKLY_SCHEDULE_HOUR", "15")),
-            "minute": int(os.getenv("WEEKLY_SCHEDULE_MINUTE", "45")),
+            "hour": int(os.getenv("WEEKLY_SCHEDULE_HOUR", "11")),
+            "minute": int(os.getenv("WEEKLY_SCHEDULE_MINUTE", "6")),
         },
         "monthly": {
             "hour": int(os.getenv("MONTHLY_SCHEDULE_HOUR", "19")),

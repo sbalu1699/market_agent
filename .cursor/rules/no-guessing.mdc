@@ -1,0 +1,40 @@
+---
+description: Do not guess — ask clarifying questions before changing schedules, automation, or user-reported issues
+alwaysApply: true
+---
+
+# NO GUESSING — ask first
+
+Before changing GitHub cron times, email schedules, or diagnosing missed emails:
+
+1. **Confirm facts with the user** — do not assume report type (weekly vs monthly), root cause, or timezone labels (CST vs CDT vs ET).
+2. **Ask when unclear** — desired **inbox time** vs **cron fire time**, whether content was correct, and what is already committed vs local-only.
+3. **Use measured data** — if the user gives scheduled time and actual delivery time, compute delay from that; state the math explicitly.
+4. **One change at a time** — do not bundle unrelated fixes (slot detection, cron mapping, schedule times) without user approval.
+5. **Document reception vs cron** — every schedule change must comment both the **target inbox time** and the **cron UTC time** (cron = reception − measured GitHub delay).
+
+## GitHub Actions schedule (market agent)
+
+- **Measured delay:** ~52 minutes (May 30 2026: 2:45 PM CST cron → 3:37 PM CST inbox).
+- **Slot detection:** calendar-based via `resolve_schedule_slot()` + `--trust-schedule` (committed approach — do not replace with wall-clock ±N min guessing).
+- **Skip = fail in CI:** `scheduled_run.py` exits 1 on skip when `GITHUB_ACTIONS` is set.
+
+## Target inbox times (what the user expects)
+
+| Slot | Inbox time |
+|------|------------|
+| daily-am | 11:30 AM ET |
+| daily-pm | 7:04 PM ET |
+| weekly | 10:06 AM Central (11:06 AM ET) — broad + bullion |
+| monthly | 7:00 PM ET — last calendar day — broad + bullion |
+
+## Cron fire times (reception − 52 min)
+
+| Slot | Cron (Central / ET) | UTC cron |
+|------|---------------------|----------|
+| daily-am | 10:38 AM ET | `38 14` / `38 15` Mon–Fri |
+| daily-pm | 6:12 PM ET | `12 22` / `12 23` Mon–Fri |
+| weekly | 9:14 AM Central | `14 14` / `14 15` Saturday |
+| monthly | 6:08 PM ET | `8 22` / `8 23` on 28–31 |
+
+When changing any row, update `.github/workflows/market-reports.yml` and keep this table in sync.

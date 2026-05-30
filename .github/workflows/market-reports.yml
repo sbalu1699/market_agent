@@ -5,25 +5,25 @@
 #   EMAIL_FROM        — e.g. "Market Agent <reports@yourdomain.com>"
 #   EMAIL_TO          — recipient address
 #
-# Cron uses UTC (dual lines for DST). Scheduled runs use calendar-based slot
-# detection because GitHub cron often starts 30–90+ minutes late.
+# GitHub cron often starts ~52 min late (measured May 30 2026). Cron times below
+# are set (target inbox time − 52 min). Slot detection uses ET calendar + --trust-schedule.
 
 name: Market Reports
 
 on:
   schedule:
-    # Daily AM — 11:30 ET (15:30 UTC EDT / 16:30 UTC EST), Mon–Fri
-    - cron: "30 15 * * 1-5"
-    - cron: "30 16 * * 1-5"
-    # Daily PM — 19:04 ET (23:04 UTC EDT / 00:04 UTC EST next day)
-    - cron: "4 23 * * 1-5"
-    - cron: "4 0 * * 2-6"
-    # Weekly — Saturday 2:45 PM Central (19:45 UTC CDT / 20:45 UTC CST)
-    - cron: "45 19 * * 6"
-    - cron: "45 20 * * 6"
-    # Monthly — last day 19:00 ET (23:00 UTC EDT; 00:00 UTC next day EST)
-    - cron: "0 23 28-31 * *"
-    - cron: "0 0 1 * *"
+    # Daily AM — inbox 11:30 ET; cron 10:38 ET (14:38 UTC EDT / 15:38 UTC EST), Mon–Fri
+    - cron: "38 14 * * 1-5"
+    - cron: "38 15 * * 1-5"
+    # Daily PM — inbox 19:04 ET; cron 18:12 ET (22:12 UTC EDT / 23:12 UTC EST), Mon–Fri
+    - cron: "12 22 * * 1-5"
+    - cron: "12 23 * * 1-5"
+    # Weekly — inbox 10:06 AM Central; cron 9:14 AM Central (14:14 UTC CDT / 15:14 UTC CST)
+    - cron: "14 14 * * 6"
+    - cron: "14 15 * * 6"
+    # Monthly — inbox 19:00 ET last day; cron 18:08 ET (22:08 UTC EDT / 23:08 UTC EST)
+    - cron: "8 22 28-31 * *"
+    - cron: "8 23 28-31 * *"
   workflow_dispatch:
     inputs:
       slot:
@@ -46,8 +46,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      WEEKLY_SCHEDULE_HOUR: "15"
-      WEEKLY_SCHEDULE_MINUTE: "45"
+      # Target inbox: 10:06 AM Central = 11:06 AM ET (daylight time)
+      WEEKLY_SCHEDULE_HOUR: "11"
+      WEEKLY_SCHEDULE_MINUTE: "6"
     steps:
       - uses: actions/checkout@v6
 

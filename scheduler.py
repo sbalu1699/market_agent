@@ -87,7 +87,7 @@ def main() -> None:
     daily_am_minute = int(os.getenv("DAILY_AM_SCHEDULE_MINUTE", "30"))
     daily_pm_hour = int(os.getenv("SCHEDULE_HOUR", "19"))
     daily_pm_minute = int(os.getenv("SCHEDULE_MINUTE", "4"))
-    weekly_hour = int(os.getenv("WEEKLY_SCHEDULE_HOUR", "10"))
+    weekly_hour = int(os.getenv("WEEKLY_SCHEDULE_HOUR", "11"))
     weekly_minute = int(os.getenv("WEEKLY_SCHEDULE_MINUTE", "6"))
     monthly_hour = int(os.getenv("MONTHLY_SCHEDULE_HOUR", "19"))
     monthly_minute = int(os.getenv("MONTHLY_SCHEDULE_MINUTE", "0"))

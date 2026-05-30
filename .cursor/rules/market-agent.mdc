@@ -6,7 +6,7 @@ alwaysApply: false
 
 ## Email Schedule (all times **Eastern / ET**)
 - **Daily** — **11:30 AM ET** and **7:04 PM ET** on trading days — **two emails per run** (day + momentum) → **4 daily emails** total
-- **Weekly** — **Saturday 10:06 AM ET** — broad market + bullion email
+- **Weekly** — **Saturday 10:06 AM Central** (11:06 AM ET) — broad market + bullion email
 - **Monthly** — **last day of month, 7:00 PM ET** — broad market + bullion email
 
 ## Bullion reports (weekly & monthly)
@@ -75,11 +75,36 @@ alwaysApply: false
 - Sort key matches report period (day / week / month / momentum)
 
 ## GitHub Actions automation (Option 4)
+
+See also **`.cursor/rules/no-guessing.mdc`** (always on) — ask before changing schedules.
+
+### Target inbox times
+| Slot | Inbox time | Emails |
+|------|------------|--------|
+| daily-am | 11:30 AM ET | 2 (day + momentum) |
+| daily-pm | 7:04 PM ET | 2 (day + momentum) |
+| weekly | **10:06 AM Central** (11:06 AM ET) | broad + bullion |
+| monthly | 7:00 PM ET, last calendar day | broad + bullion |
+
+### GitHub cron (inbox − ~52 min delay)
+Measured May 30 2026: 2:45 PM CST cron → 3:37 PM CST inbox. Cron fires early so email arrives on time.
+
+| Slot | UTC cron (EDT / EST) |
+|------|----------------------|
+| daily-am | `38 14` / `38 15` Mon–Fri |
+| daily-pm | `12 22` / `12 23` Mon–Fri |
+| weekly | `14 14` / `14 15` Saturday |
+| monthly | `8 22` / `8 23` on 28–31 |
+
+### Slot detection (committed — do not replace with clock guessing)
+- `resolve_schedule_slot()` picks slot from ET calendar (Saturday → weekly, etc.)
+- Scheduled runs use `--trust-schedule` (day gates only; no ±20 min clock gate)
+- Skip in GitHub Actions → exit 1 (red X, not silent green)
+- Monthly still requires `_is_last_day_of_month()` before sending
+
 - Workflow: `.github/workflows/market-reports.yml`
-- Entrypoint: `python scripts/scheduled_run.py <slot>` with ET gating (±20 min)
-- Slots: `daily-am`, `daily-pm`, `weekly`, `monthly`
 - Secrets: `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_TO`
-- Manual run: Actions → Market Reports → Run workflow
+- Manual: Actions → Market Reports → Run workflow
 
 ## Commands
 ```bash
