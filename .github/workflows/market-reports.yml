@@ -18,9 +18,9 @@ on:
     # Daily PM — 19:04 ET (23:04 UTC EDT / 00:04 UTC EST next day)
     - cron: "4 23 * * 1-5"
     - cron: "4 0 * * 2-6"
-    # Weekly — Saturday 2:00 PM Central (19:00 UTC CDT / 20:00 UTC CST)
-    - cron: "0 19 * * 6"
-    - cron: "0 20 * * 6"
+    # Weekly — Saturday 2:16 PM Central (19:16 UTC CDT / 20:16 UTC CST)
+    - cron: "16 19 * * 6"
+    - cron: "16 20 * * 6"
     # Monthly — last day 19:00 ET (23:00 UTC EDT; 00:00 UTC next day EST)
     - cron: "0 23 28-31 * *"
     - cron: "0 0 1 * *"
@@ -47,7 +47,7 @@ jobs:
     timeout-minutes: 30
     env:
       WEEKLY_SCHEDULE_HOUR: "15"
-      WEEKLY_SCHEDULE_MINUTE: "0"
+      WEEKLY_SCHEDULE_MINUTE: "16"
     steps:
       - uses: actions/checkout@v6
 
