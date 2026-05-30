@@ -8,7 +8,7 @@
 # Optional secrets (defaults shown):
 #   AGENT_MODE=pipeline
 #
-# Cron uses UTC. Each slot has two cron lines (EDT + EST). scripts/scheduled_run.py
+# Cron uses UTC. Each slot has two cron lines (EDT/CDT + EST/CST). scripts/scheduled_run.py
 # verifies the current Eastern time is within ±20 minutes of the target before sending.
 
 name: Market Reports
@@ -21,9 +21,9 @@ on:
     # Daily PM — 19:04 ET (23:04 UTC EDT / 00:04 UTC EST next day)
     - cron: "4 23 * * 1-5"
     - cron: "4 0 * * 2-6"
-    # Weekly — Saturday 10:06 ET (14:06 UTC EDT / 15:06 UTC EST)
-    - cron: "6 14 * * 6"
-    - cron: "6 15 * * 6"
+    # Weekly — Saturday 2:00 PM Central (19:00 UTC CDT / 20:00 UTC CST)
+    - cron: "0 19 * * 6"
+    - cron: "0 20 * * 6"
     # Monthly — last day 19:00 ET (23:00 UTC EDT; 00:00 UTC next day EST)
     - cron: "0 23 28-31 * *"
     - cron: "0 0 1 * *"
@@ -48,6 +48,10 @@ jobs:
   dispatch:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # 2:00 PM Central = 3:00 PM Eastern (when both zones are on daylight time)
+      WEEKLY_SCHEDULE_HOUR: "15"
+      WEEKLY_SCHEDULE_MINUTE: "0"
     steps:
       - uses: actions/checkout@v6
 
