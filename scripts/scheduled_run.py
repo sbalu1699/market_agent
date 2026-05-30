@@ -51,7 +51,7 @@ def _slot_config(slot: str) -> dict:
         },
         "weekly": {
             "hour": int(os.getenv("WEEKLY_SCHEDULE_HOUR", "15")),
-            "minute": int(os.getenv("WEEKLY_SCHEDULE_MINUTE", "16")),
+            "minute": int(os.getenv("WEEKLY_SCHEDULE_MINUTE", "45")),
         },
         "monthly": {
             "hour": int(os.getenv("MONTHLY_SCHEDULE_HOUR", "19")),
