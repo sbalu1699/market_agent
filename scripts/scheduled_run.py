@@ -38,6 +38,18 @@ logger = logging.getLogger("scheduled-run")
 ET = ZoneInfo("America/New_York")
 TOLERANCE_MINUTES = int(os.getenv("SCHEDULE_TOLERANCE_MINUTES", "20"))
 
+# Must match .github/workflows/market-reports.yml cron lines exactly.
+CRON_TO_SLOT: dict[str, str] = {
+    "30 15 * * 1-5": "daily-am",
+    "30 16 * * 1-5": "daily-am",
+    "12 22 * * 1-5": "daily-pm",
+    "12 23 * * 1-5": "daily-pm",
+    "14 14 * * 6": "weekly",
+    "14 15 * * 6": "weekly",
+    "8 22 28-31 * *": "monthly",
+    "8 23 28-31 * *": "monthly",
+}
+
 
 def _slot_config(slot: str) -> dict:
     defaults = {
@@ -74,8 +86,13 @@ def _in_time_window(now: datetime, hour: int, minute: int) -> bool:
     return delta <= TOLERANCE_MINUTES * 60
 
 
+def resolve_slot_from_cron(cron: str) -> str:
+    """Map the GitHub schedule cron expression to a report slot."""
+    return CRON_TO_SLOT.get(" ".join(cron.split()), "unknown")
+
+
 def resolve_schedule_slot(now: datetime | None = None) -> str:
-    """Pick report slot from ET calendar (for GitHub cron, which often runs late)."""
+    """Fallback when github.event.schedule is unavailable."""
     now = now or datetime.now(ET)
     if now.tzinfo is None:
         now = now.replace(tzinfo=ET)

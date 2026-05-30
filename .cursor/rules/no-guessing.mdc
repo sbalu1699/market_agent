@@ -16,7 +16,7 @@ Before changing GitHub cron times, email schedules, or diagnosing missed emails:
 ## GitHub Actions schedule (market agent)
 
 - **Measured delay:** ~52 minutes (May 30 2026: 2:45 PM CST cron → 3:37 PM CST inbox).
-- **Slot detection:** calendar-based via `resolve_schedule_slot()` + `--trust-schedule` (committed approach — do not replace with wall-clock ±N min guessing).
+- **Slot detection:** `github.event.schedule` → `CRON_TO_SLOT` (not calendar clock guessing). `--trust-schedule` for day gates only.
 - **Skip = fail in CI:** `scheduled_run.py` exits 1 on skip when `GITHUB_ACTIONS` is set.
 
 ## Target inbox times (what the user expects)
@@ -32,7 +32,7 @@ Before changing GitHub cron times, email schedules, or diagnosing missed emails:
 
 | Slot | Cron (Central / ET) | UTC cron |
 |------|---------------------|----------|
-| daily-am | 10:38 AM ET | `38 14` / `38 15` Mon–Fri |
+| daily-am | 11:30 AM ET (inbox target) | `30 15` / `30 16` Mon–Fri — **job queued 10:30 AM Central** |
 | daily-pm | 6:12 PM ET | `12 22` / `12 23` Mon–Fri |
 | weekly | 9:14 AM Central | `14 14` / `14 15` Saturday |
 | monthly | 6:08 PM ET | `8 22` / `8 23` on 28–31 |

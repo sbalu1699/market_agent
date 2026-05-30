@@ -1,0 +1,24 @@
+---
+description: Ask before commit and test before commit — never push unreviewed automation changes
+alwaysApply: true
+---
+
+# Ask before commit
+
+Before `git commit` or `git push`:
+
+1. **Show the user what will change** — list files, summarize the diff, and explain *why* in plain language.
+2. **Wait for explicit approval** — e.g. "go ahead", "commit it", "push". Do not commit because a task "seems done" or to save time.
+3. **Separate local work from GitHub** — say clearly what is local-only vs already on `origin/main`.
+4. **No drive-by commits** — do not bundle rule files, schedule changes, and code fixes in one commit unless the user approved the whole bundle.
+
+# Test before commit
+
+Before committing automation or schedule changes, run at least minimal verification:
+
+1. **Slot / schedule logic** — run Python checks against `scripts/scheduled_run.py` (cron → slot mapping, `should_run` day gates, skip behavior).
+2. **State expected outcomes** — for each slot (daily-am, daily-pm, weekly, monthly), say what should run and what should skip (e.g. monthly cron on day 30 → skip, no email).
+3. **Report test results to the user** — pass/fail table or summary; if tests fail, fix or ask before committing.
+4. **No live email sends unless asked** — local pipeline runs that send Resend emails require explicit user approval.
+
+If testing is not possible, say so and ask whether to commit anyway or wait.

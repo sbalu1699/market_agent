@@ -6,15 +6,15 @@
 #   EMAIL_TO          — recipient address
 #
 # GitHub cron often starts ~52 min late (measured May 30 2026). Cron times below
-# are set (target inbox time − 52 min). Slot detection uses ET calendar + --trust-schedule.
+# are set (target inbox time − 52 min). Slot = github.event.schedule → CRON_TO_SLOT.
 
 name: Market Reports
 
 on:
   schedule:
-    # Daily AM — inbox 11:30 ET; cron 10:38 ET (14:38 UTC EDT / 15:38 UTC EST), Mon–Fri
-    - cron: "38 14 * * 1-5"
-    - cron: "38 15 * * 1-5"
+    # Daily AM — job queued 10:30 AM Central (15:30 UTC CDT / 16:30 UTC CST), Mon–Fri
+    - cron: "30 15 * * 1-5"
+    - cron: "30 16 * * 1-5"
     # Daily PM — inbox 19:04 ET; cron 18:12 ET (22:12 UTC EDT / 23:12 UTC EST), Mon–Fri
     - cron: "12 22 * * 1-5"
     - cron: "12 23 * * 1-5"
@@ -62,6 +62,8 @@ jobs:
 
       - name: Determine slot
         id: slot
+        env:
+          GITHUB_CRON: ${{ github.event.schedule }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "name=${{ inputs.slot }}" >> "$GITHUB_OUTPUT"
@@ -69,21 +71,21 @@ jobs:
             echo "trust=false" >> "$GITHUB_OUTPUT"
           else
             SLOT=$(python -c "
-          import sys
+          import os, sys
           sys.path.insert(0, '.')
-          from scripts.scheduled_run import resolve_schedule_slot
-          print(resolve_schedule_slot())
+          from scripts.scheduled_run import resolve_slot_from_cron
+          print(resolve_slot_from_cron(os.environ['GITHUB_CRON']))
           ")
             echo "name=$SLOT" >> "$GITHUB_OUTPUT"
             echo "force=false" >> "$GITHUB_OUTPUT"
             echo "trust=true" >> "$GITHUB_OUTPUT"
-            echo "Resolved slot $SLOT (calendar-based, cron delay tolerant)"
+            echo "Cron '${{ github.event.schedule }}' -> slot $SLOT"
           fi
 
       - name: Fail if schedule slot unknown
         if: github.event_name == 'schedule' && steps.slot.outputs.name == 'unknown'
         run: |
-          echo "Could not resolve schedule slot from ET calendar"
+          echo "Unknown cron: ${{ github.event.schedule }}"
           exit 1
 
       - name: Run market pipeline

@@ -91,16 +91,17 @@ Measured May 30 2026: 2:45 PM CST cron → 3:37 PM CST inbox. Cron fires early s
 
 | Slot | UTC cron (EDT / EST) |
 |------|----------------------|
-| daily-am | `38 14` / `38 15` Mon–Fri |
+| daily-am | `30 15` / `30 16` Mon–Fri — job queued **10:30 AM Central** (11:30 AM ET) |
 | daily-pm | `12 22` / `12 23` Mon–Fri |
 | weekly | `14 14` / `14 15` Saturday |
 | monthly | `8 22` / `8 23` on 28–31 |
 
-### Slot detection (committed — do not replace with clock guessing)
-- `resolve_schedule_slot()` picks slot from ET calendar (Saturday → weekly, etc.)
-- Scheduled runs use `--trust-schedule` (day gates only; no ±20 min clock gate)
-- Skip in GitHub Actions → exit 1 (red X, not silent green)
-- Monthly still requires `_is_last_day_of_month()` before sending
+### Slot detection (cron → slot, not clock guessing)
+- GitHub passes `github.event.schedule` → `CRON_TO_SLOT` in `scheduled_run.py`
+- **Weekly worked** because Saturday is unambiguous; **daily/monthly needed this** because calendar heuristics picked the wrong slot (e.g. monthly cron on day 28–30 fired daily-pm instead of skipping monthly)
+- Scheduled runs use `--trust-schedule` (day gates: trading day, Saturday, last calendar day for monthly)
+- Skip in GitHub Actions → exit 1
+- Keep `CRON_TO_SLOT` in sync with workflow YAML when changing crons
 
 - Workflow: `.github/workflows/market-reports.yml`
 - Secrets: `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_TO`
