@@ -25,6 +25,7 @@ from agent import (
     run_pipeline,
     run_weekly_pipeline,
 )
+from mcp_server.trading_calendar import is_trading_day
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,26 +34,6 @@ logging.basicConfig(
 logger = logging.getLogger("scheduler")
 
 ET = ZoneInfo("America/New_York")
-
-US_MARKET_HOLIDAYS_2026 = {
-    "2026-01-01",
-    "2026-01-19",
-    "2026-02-16",
-    "2026-04-03",
-    "2026-05-25",
-    "2026-07-03",
-    "2026-09-07",
-    "2026-11-26",
-    "2026-12-25",
-}
-
-
-def is_trading_day(dt: datetime | None = None) -> bool:
-    """Return True if the given ET datetime is a weekday and not a market holiday."""
-    dt = dt or datetime.now(ET)
-    if dt.weekday() >= 5:
-        return False
-    return dt.strftime("%Y-%m-%d") not in US_MARKET_HOLIDAYS_2026
 
 
 def daily_job() -> None:

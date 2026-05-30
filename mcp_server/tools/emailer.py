@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import logging
 import os
 from datetime import date, datetime
@@ -12,6 +13,13 @@ import resend
 logger = logging.getLogger(__name__)
 ET = ZoneInfo("America/New_York")
 CST = ZoneInfo("America/Chicago")
+
+
+def _esc(value: object) -> str:
+    """Escape dynamic text for safe HTML insertion."""
+    if value is None:
+        return ""
+    return html.escape(str(value))
 
 
 def _to_et(dt: datetime | date) -> datetime:
@@ -111,7 +119,7 @@ def _build_forex_table(forex: list[dict], period: str = "weekly") -> str:
         rows += f"""
         <tr>
           <td>{rank}</td>
-          <td><strong>{fx.get('name', ticker)}</strong></td>
+          <td><strong>{_esc(fx.get('name', ticker))}</strong></td>
           <td>{_fmt_forex_rate(ticker, fx.get('price'))}</td>
           {_forex_primary_sort_cell(ticker, d_val, p_val)}
           <td style="color:{_color(fx.get('ytd_change_pct'))}">{_fmt_pct(fx.get('ytd_change_pct'))}</td>
@@ -214,9 +222,9 @@ def _build_stocks_table(stocks: list[dict], period: str = "daily", variant: str 
         rows += f"""
         <tr>
           <td>{rank}</td>
-          <td><strong>{s['ticker']}</strong></td>
-          <td>{s.get('name', '')[:40]}</td>
-          <td>{s.get('sector', '')}</td>
+          <td><strong>{_esc(s['ticker'])}</strong></td>
+          <td>{_esc(s.get('name', '')[:40])}</td>
+          <td>{_esc(s.get('sector', ''))}</td>
           <td>${s['price']:.2f}</td>
           {_primary_sort_cell(d_val, p_val)}
           <td style="color:{_color(s.get('ytd_change_dollar'))}">{_fmt_dollar_change(s.get('ytd_change_dollar'))}</td>
@@ -254,7 +262,7 @@ def _build_sector_table(sectors: list[dict], period: str = "daily", variant: str
         rows += f"""
         <tr>
           <td>{rank}</td>
-          <td><strong>{s['sector']}</strong></td>
+          <td><strong>{_esc(s['sector'])}</strong></td>
           <td>{s['stock_count']}</td>
           {_primary_sort_cell(d_val, p_val)}
           <td style="color:{_color(s.get('avg_ytd_change_dollar'))}">{_fmt_dollar_change(s.get('avg_ytd_change_dollar'))}</td>
@@ -280,7 +288,7 @@ def _build_sector_table(sectors: list[dict], period: str = "daily", variant: str
 
 def _fmt_fund_name(name: str, expense_ratio: float | None, max_len: int = 45) -> str:
     """Name plus inline expense ratio for narrow email clients."""
-    label = name[:max_len]
+    label = _esc(name[:max_len])
     er = _fmt_expense_ratio(expense_ratio)
     return f'{label}<br><span style="font-size:11px;color:#64748b">Exp ratio: {er}</span>'
 
@@ -301,7 +309,7 @@ def _build_fund_table(
         rows += f"""
         <tr>
           <td>{rank}</td>
-          <td><strong>{f['ticker']}</strong><br><span style="font-size:11px;color:#64748b">Exp: {_fmt_expense_ratio(f.get('expense_ratio'))}</span></td>
+          <td><strong>{_esc(f['ticker'])}</strong><br><span style="font-size:11px;color:#64748b">Exp: {_fmt_expense_ratio(f.get('expense_ratio'))}</span></td>
           <td>{_fmt_fund_name(f.get('name', f['ticker']), f.get('expense_ratio'))}</td>
           <td>{_fmt_expense_ratio(f.get('expense_ratio'))}</td>
           <td>${f['price']:.2f}</td>
@@ -344,8 +352,8 @@ def _build_crypto_section(
         overview_rows += f"""
         <tr>
           <td>{rank}</td>
-          <td><strong>{c.get('name', c['ticker'])}</strong></td>
-          <td>{c['ticker']}</td>
+          <td><strong>{_esc(c.get('name', c['ticker']))}</strong></td>
+          <td>{_esc(c['ticker'])}</td>
           <td>${c['price']:.2f}</td>
           {_primary_sort_cell(d_val, p_val)}
           <td style="color:{_color(c.get('ytd_change_pct'))}">{_fmt_pct(c.get('ytd_change_pct'))}</td>
@@ -429,7 +437,7 @@ def build_html_report(
     <body style="font-family:Arial,sans-serif;color:#1e293b;max-width:900px;margin:auto">
       <h1 style="color:#0f172a">{title}</h1>
       {as_of_line}
-      {f'<p><em>{summary}</em></p>' if summary else ''}
+      {f'<p><em>{_esc(summary)}</em></p>' if summary else ''}
 
       <h2>Top Performing Stocks</h2>
       <p style="font-size:13px;color:#64748b">{subtitle}</p>
@@ -557,8 +565,8 @@ def build_bullion_html_report(
         overview_rows += f"""
         <tr>
           <td>{rank}</td>
-          <td><strong>{m.get('name', m['ticker'])}</strong></td>
-          <td>{m['ticker']}</td>
+          <td><strong>{_esc(m.get('name', m['ticker']))}</strong></td>
+          <td>{_esc(m['ticker'])}</td>
           <td>${m['price']:.2f}</td>
           {_primary_sort_cell(d_val, p_val)}
           <td style="color:{_color(m.get('ytd_change_pct'))}">{_fmt_pct(m.get('ytd_change_pct'))}</td>
@@ -587,7 +595,7 @@ def build_bullion_html_report(
     <body style="font-family:Arial,sans-serif;color:#1e293b;max-width:900px;margin:auto">
       <h1 style="color:#0f172a">{title}</h1>
       {as_of_line}
-      {f'<p><em>{summary}</em></p>' if summary else ''}
+      {f'<p><em>{_esc(summary)}</em></p>' if summary else ''}
 
       <h2>Precious Metals Overview</h2>
       <p style="font-size:13px;color:#64748b">

@@ -7,51 +7,10 @@ from collections import defaultdict
 
 import pandas as pd
 
-from .market_data import TRADING_DAYS_1M, TRADING_DAYS_1W, calc_ytd_change, fetch_stock_history
+from .market_data import TRADING_DAYS_1M, TRADING_DAYS_2M, calc_ytd_change, fetch_stock_history
+from .returns import calc_day_change, calc_month_change, calc_return, calc_week_change
 
 logger = logging.getLogger(__name__)
-
-
-def _calc_return(close: pd.Series, days: int) -> float | None:
-    if len(close) < days + 1:
-        return None
-    start = close.iloc[-days - 1]
-    end = close.iloc[-1]
-    if start == 0:
-        return None
-    return float((end / start - 1) * 100)
-
-
-def _calc_day_change(close: pd.Series) -> tuple[float | None, float | None]:
-    if len(close) < 2:
-        return None, None
-    price = float(close.iloc[-1])
-    prev = float(close.iloc[-2])
-    if prev == 0:
-        return None, None
-    return price - prev, (price / prev - 1) * 100
-
-
-def _calc_week_change(close: pd.Series) -> tuple[float | None, float | None]:
-    if len(close) < TRADING_DAYS_1W + 1:
-        return None, None
-    price = float(close.iloc[-1])
-    prev = float(close.iloc[-TRADING_DAYS_1W - 1])
-    if prev == 0:
-        return None, None
-    pct = _calc_return(close, TRADING_DAYS_1W)
-    return price - prev, pct
-
-
-def _calc_month_change(close: pd.Series) -> tuple[float | None, float | None]:
-    if len(close) < TRADING_DAYS_1M + 1:
-        return None, None
-    price = float(close.iloc[-1])
-    prev = float(close.iloc[-TRADING_DAYS_1M - 1])
-    if prev == 0:
-        return None, None
-    pct = _calc_return(close, TRADING_DAYS_1M)
-    return price - prev, pct
 
 
 def _aggregate_sectors(
@@ -83,15 +42,15 @@ def _aggregate_sectors(
             close = frame["Close"]
             sector_counts[sector] += 1
 
-            r1 = _calc_return(close, TRADING_DAYS_1M)
-            r2 = _calc_return(close, 42)
+            r1 = calc_return(close, TRADING_DAYS_1M)
+            r2 = calc_return(close, TRADING_DAYS_2M)
             if r1 is not None:
                 sector_1m[sector].append(r1)
             if r2 is not None:
                 sector_2m[sector].append(r2)
 
-            day_d, day_p = _calc_day_change(close)
-            week_d, week_p = _calc_week_change(close)
+            day_d, day_p = calc_day_change(close)
+            week_d, week_p = calc_week_change(close)
             if day_d is not None:
                 sector_day_dollar[sector].append(day_d)
             if day_p is not None:
@@ -100,7 +59,7 @@ def _aggregate_sectors(
                 sector_week_dollar[sector].append(week_d)
             if week_p is not None:
                 sector_week_pct[sector].append(week_p)
-            month_d, month_p = _calc_month_change(close)
+            month_d, month_p = calc_month_change(close)
             if month_d is not None:
                 sector_month_dollar[sector].append(month_d)
             if month_p is not None:

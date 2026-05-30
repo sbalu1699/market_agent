@@ -9,7 +9,6 @@ import pandas as pd
 
 from .market_data import (
     TRADING_DAYS_1M,
-    TRADING_DAYS_1W,
     TRADING_DAYS_2M,
     TRADING_DAYS_6M,
     TRADING_DAYS_52W,
@@ -17,6 +16,7 @@ from .market_data import (
     calc_ytd_change,
     fetch_stock_history,
 )
+from .returns import calc_day_change, calc_month_change, calc_return, calc_week_change
 
 logger = logging.getLogger(__name__)
 
@@ -110,49 +110,6 @@ class StockMetrics:
     above_ma60: bool
 
 
-def _calc_return(close: pd.Series, days: int) -> float | None:
-    if len(close) < days + 1:
-        return None
-    start = close.iloc[-days - 1]
-    end = close.iloc[-1]
-    if start == 0:
-        return None
-    return float((end / start - 1) * 100)
-
-
-def _calc_day_change(close: pd.Series, price: float) -> tuple[float | None, float | None]:
-    if len(close) < 2:
-        return None, None
-    prev = float(close.iloc[-2])
-    if prev == 0:
-        return None, None
-    dollar = price - prev
-    pct = (price / prev - 1) * 100
-    return dollar, pct
-
-
-def _calc_week_change(close: pd.Series, price: float) -> tuple[float | None, float | None]:
-    if len(close) < TRADING_DAYS_1W + 1:
-        return None, None
-    prev = float(close.iloc[-TRADING_DAYS_1W - 1])
-    if prev == 0:
-        return None, None
-    dollar = price - prev
-    pct = _calc_return(close, TRADING_DAYS_1W)
-    return dollar, pct
-
-
-def _calc_month_change(close: pd.Series, price: float) -> tuple[float | None, float | None]:
-    if len(close) < TRADING_DAYS_1M + 1:
-        return None, None
-    prev = float(close.iloc[-TRADING_DAYS_1M - 1])
-    if prev == 0:
-        return None, None
-    dollar = price - prev
-    pct = _calc_return(close, TRADING_DAYS_1M)
-    return dollar, pct
-
-
 def _calc_52w_range(frame: pd.DataFrame) -> tuple[float | None, float | None]:
     window = frame.tail(min(TRADING_DAYS_52W, len(frame)))
     if window.empty:
@@ -183,15 +140,15 @@ def _compute_metrics(
         ma200_val = close.rolling(200).mean().iloc[-1]
         ma200 = float(ma200_val) if pd.notna(ma200_val) else None
         week52_high, week52_low = _calc_52w_range(frame)
-        day_change_dollar, day_change_pct = _calc_day_change(close, price)
-        week_change_dollar, week_change_pct = _calc_week_change(close, price)
-        month_change_dollar, month_change_pct = _calc_month_change(close, price)
+        day_change_dollar, day_change_pct = calc_day_change(close, price)
+        week_change_dollar, week_change_pct = calc_week_change(close, price)
+        month_change_dollar, month_change_pct = calc_month_change(close, price)
         ytd_change_dollar, ytd_change_pct = calc_ytd_change(close)
 
-        return_1m = _calc_return(close, TRADING_DAYS_1M)
-        return_2m = _calc_return(close, TRADING_DAYS_2M)
-        return_6m = _calc_return(close, TRADING_DAYS_6M)
-        return_1y = _calc_return(close, TRADING_DAYS_52W)
+        return_1m = calc_return(close, TRADING_DAYS_1M)
+        return_2m = calc_return(close, TRADING_DAYS_2M)
+        return_6m = calc_return(close, TRADING_DAYS_6M)
+        return_1y = calc_return(close, TRADING_DAYS_52W)
         if return_1m is None or return_2m is None:
             return None
 
@@ -347,6 +304,7 @@ def _analyze_ticker_list(
     top_n: int,
     sort_key: str = "return_1m",
     history: dict | None = None,
+    expense_ratios: dict[str, float | None] | None = None,
 ) -> list[dict]:
     """Rank ETFs/funds by sort_key; includes all tickers in universe (no sector filtering)."""
     results: list[dict] = []
@@ -368,52 +326,116 @@ def _analyze_ticker_list(
             logger.debug("Analysis skipped for %s: %s", ticker, exc)
 
     results.sort(key=lambda r: r.get(sort_key) or -999, reverse=True)
-    return attach_expense_ratios(results[:top_n])
+    return attach_expense_ratios(results[:top_n], ratios=expense_ratios)
 
 
-def analyze_top_etfs(top_n: int = 20, history: dict | None = None) -> list[dict]:
+def analyze_top_etfs(
+    top_n: int = 20,
+    history: dict | None = None,
+    expense_ratios: dict[str, float | None] | None = None,
+) -> list[dict]:
     return _analyze_ticker_list(
-        {t: t for t in ETF_UNIVERSE}, top_n, sort_key="day_change_pct", history=history
+        {t: t for t in ETF_UNIVERSE},
+        top_n,
+        sort_key="day_change_pct",
+        history=history,
+        expense_ratios=expense_ratios,
     )
 
 
-def analyze_top_etfs_momentum(top_n: int = 20, history: dict | None = None) -> list[dict]:
+def analyze_top_etfs_momentum(
+    top_n: int = 20,
+    history: dict | None = None,
+    expense_ratios: dict[str, float | None] | None = None,
+) -> list[dict]:
     return _analyze_ticker_list(
-        {t: t for t in ETF_UNIVERSE}, top_n, sort_key="return_1m", history=history
+        {t: t for t in ETF_UNIVERSE},
+        top_n,
+        sort_key="return_1m",
+        history=history,
+        expense_ratios=expense_ratios,
     )
 
 
-def analyze_top_etfs_weekly(top_n: int = 20, history: dict | None = None) -> list[dict]:
+def analyze_top_etfs_weekly(
+    top_n: int = 20,
+    history: dict | None = None,
+    expense_ratios: dict[str, float | None] | None = None,
+) -> list[dict]:
     return _analyze_ticker_list(
-        {t: t for t in ETF_UNIVERSE}, top_n, sort_key="week_change_pct", history=history
+        {t: t for t in ETF_UNIVERSE},
+        top_n,
+        sort_key="week_change_pct",
+        history=history,
+        expense_ratios=expense_ratios,
     )
 
 
-def analyze_top_etfs_monthly(top_n: int = 20, history: dict | None = None) -> list[dict]:
+def analyze_top_etfs_monthly(
+    top_n: int = 20,
+    history: dict | None = None,
+    expense_ratios: dict[str, float | None] | None = None,
+) -> list[dict]:
     return _analyze_ticker_list(
-        {t: t for t in ETF_UNIVERSE}, top_n, sort_key="month_change_pct", history=history
+        {t: t for t in ETF_UNIVERSE},
+        top_n,
+        sort_key="month_change_pct",
+        history=history,
+        expense_ratios=expense_ratios,
     )
 
 
-def analyze_top_mutual_funds(top_n: int = 20, history: dict | None = None) -> list[dict]:
+def analyze_top_mutual_funds(
+    top_n: int = 20,
+    history: dict | None = None,
+    expense_ratios: dict[str, float | None] | None = None,
+) -> list[dict]:
     return _analyze_ticker_list(
-        MUTUAL_FUND_UNIVERSE, top_n, sort_key="day_change_pct", history=history
+        MUTUAL_FUND_UNIVERSE,
+        top_n,
+        sort_key="day_change_pct",
+        history=history,
+        expense_ratios=expense_ratios,
     )
 
 
-def analyze_top_mutual_funds_momentum(top_n: int = 20, history: dict | None = None) -> list[dict]:
+def analyze_top_mutual_funds_momentum(
+    top_n: int = 20,
+    history: dict | None = None,
+    expense_ratios: dict[str, float | None] | None = None,
+) -> list[dict]:
     return _analyze_ticker_list(
-        MUTUAL_FUND_UNIVERSE, top_n, sort_key="return_1m", history=history
+        MUTUAL_FUND_UNIVERSE,
+        top_n,
+        sort_key="return_1m",
+        history=history,
+        expense_ratios=expense_ratios,
     )
 
 
-def analyze_top_mutual_funds_weekly(top_n: int = 20, history: dict | None = None) -> list[dict]:
+def analyze_top_mutual_funds_weekly(
+    top_n: int = 20,
+    history: dict | None = None,
+    expense_ratios: dict[str, float | None] | None = None,
+) -> list[dict]:
     return _analyze_ticker_list(
-        MUTUAL_FUND_UNIVERSE, top_n, sort_key="week_change_pct", history=history
+        MUTUAL_FUND_UNIVERSE,
+        top_n,
+        sort_key="week_change_pct",
+        history=history,
+        expense_ratios=expense_ratios,
     )
 
 
-def analyze_top_mutual_funds_monthly(top_n: int = 20, history: dict | None = None) -> list[dict]:
+def analyze_top_mutual_funds_monthly(
+    top_n: int = 20,
+    history: dict | None = None,
+    expense_ratios: dict[str, float | None] | None = None,
+) -> list[dict]:
     return _analyze_ticker_list(
-        MUTUAL_FUND_UNIVERSE, top_n, sort_key="month_change_pct", history=history
+        MUTUAL_FUND_UNIVERSE,
+        top_n,
+        sort_key="month_change_pct",
+        history=history,
+        expense_ratios=expense_ratios,
     )

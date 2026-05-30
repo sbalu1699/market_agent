@@ -66,25 +66,28 @@ jobs:
             echo "name=${{ inputs.slot }}" >> "$GITHUB_OUTPUT"
             echo "force=${{ inputs.force }}" >> "$GITHUB_OUTPUT"
           else
-            H=$(date -u +%H)
-            M=$(date -u +%M)
-            DOW=$(date -u +%u)
-            DOM=$(date -u +%d)
-            # Match UTC cron windows to slot names (ET gating happens in Python)
-            if { [ "$H" = "15" ] || [ "$H" = "16" ]; } && [ "$M" = "30" ] && [ "$DOW" -le 5 ]; then
-              echo "name=daily-am" >> "$GITHUB_OUTPUT"
-            elif { [ "$H" = "23" ] && [ "$M" = "04" ] && [ "$DOW" -le 5 ]; } || \
-                 { [ "$H" = "00" ] && [ "$M" = "04" ] && [ "$DOW" -ge 2 ]; }; then
-              echo "name=daily-pm" >> "$GITHUB_OUTPUT"
-            elif { [ "$H" = "14" ] || [ "$H" = "15" ]; } && [ "$M" = "06" ] && [ "$DOW" = "6" ]; then
-              echo "name=weekly" >> "$GITHUB_OUTPUT"
-            elif { [ "$H" = "23" ] && [ "$M" = "00" ] && [ "$DOM" -ge 28 ]; } || \
-                 { [ "$H" = "00" ] && [ "$M" = "00" ] && [ "$DOM" = "01" ]; }; then
-              echo "name=monthly" >> "$GITHUB_OUTPUT"
-            else
-              echo "name=unknown" >> "$GITHUB_OUTPUT"
-            fi
+            # Reuse ET ±20 min windows from scripts/scheduled_run.py (handles cron queue delay).
+            SLOT=$(python -c "
+          import sys
+          sys.path.insert(0, '.')
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          from scripts.scheduled_run import _slot_config, _in_time_window
+          now = datetime.now(ZoneInfo('America/New_York'))
+          best = None
+          best_delta = None
+          for slot in ('daily-am', 'daily-pm', 'weekly', 'monthly'):
+              cfg = _slot_config(slot)
+              target = now.replace(hour=cfg['hour'], minute=cfg['minute'], second=0, microsecond=0)
+              delta = abs((now - target).total_seconds())
+              if delta <= 20 * 60 and (best_delta is None or delta < best_delta):
+                  best = slot
+                  best_delta = delta
+          print(best or 'unknown')
+          ")
+            echo "name=$SLOT" >> "$GITHUB_OUTPUT"
             echo "force=false" >> "$GITHUB_OUTPUT"
+            echo "Resolved slot $SLOT"
           fi
 
       - name: Run market pipeline

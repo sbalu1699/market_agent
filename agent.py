@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from anthropic import Anthropic
@@ -60,6 +61,8 @@ from mcp_server.tools.bullion import (
 )
 from mcp_server.tools.emailer import send_bullion_report_email, send_report_email
 from mcp_server.tools.market_data import (
+    clear_expense_ratio_cache,
+    fetch_expense_ratios,
     fetch_sp500_universe,
     fetch_stock_history,
     last_trading_date,
@@ -81,6 +84,59 @@ logging.basicConfig(
 logger = logging.getLogger("market-agent")
 
 ET = ZoneInfo("America/New_York")
+
+
+@dataclass
+class AgentCache:
+    """Reused across tool calls within a single run_agent() session."""
+
+    universe: object | None = None
+    stock_history: dict | None = None
+    etf_history: dict | None = None
+    mf_history: dict | None = None
+    expense_ratios: dict[str, float | None] = field(default_factory=dict)
+
+    def get_universe(self):
+        if self.universe is None:
+            self.universe = fetch_sp500_universe()
+        return self.universe
+
+    def get_stock_history(self):
+        universe = self.get_universe()
+        if self.stock_history is None:
+            self.stock_history = fetch_stock_history(universe["Symbol"].tolist())
+        return self.stock_history
+
+    def get_etf_history(self):
+        if self.etf_history is None:
+            self.etf_history = fetch_stock_history(ETF_UNIVERSE)
+        return self.etf_history
+
+    def get_mf_history(self):
+        if self.mf_history is None:
+            self.mf_history = fetch_stock_history(list(MUTUAL_FUND_UNIVERSE.keys()))
+        return self.mf_history
+
+    def get_expense_ratios(self, tickers: list[str]) -> dict[str, float | None]:
+        missing = [t for t in tickers if t not in self.expense_ratios]
+        if missing:
+            fetch_expense_ratios(missing, cache=self.expense_ratios)
+        return {t: self.expense_ratios.get(t) for t in tickers}
+
+
+def _fund_expense_ratios() -> dict[str, float | None]:
+    """Fetch expense ratios once for ETF, mutual fund, and crypto ETF universes."""
+    clear_expense_ratio_cache()
+    tickers = list(
+        dict.fromkeys(
+            [
+                *ETF_UNIVERSE,
+                *MUTUAL_FUND_UNIVERSE.keys(),
+                *CRYPTO_ETF_UNIVERSE.keys(),
+            ]
+        )
+    )
+    return fetch_expense_ratios(tickers)
 
 
 def _crypto_tickers() -> list[str]:
@@ -175,29 +231,51 @@ TOOLS = [
 ]
 
 
-def execute_tool(name: str, inputs: dict) -> str:
+def execute_tool(name: str, inputs: dict, cache: AgentCache | None = None) -> str:
     """Dispatch tool calls to Python implementations."""
+    cache = cache or AgentCache()
     try:
         if name == "fetch_sp500":
-            df = fetch_sp500_universe()
+            df = cache.get_universe()
             return df.to_json(orient="records")
 
         if name == "get_top_stocks":
-            universe = fetch_sp500_universe()
+            universe = cache.get_universe()
+            history = cache.get_stock_history()
             top_n = inputs.get("top_n", 20)
-            return json.dumps(analyze_top_stocks(universe, top_n=top_n), indent=2)
+            return json.dumps(
+                analyze_top_stocks(universe, top_n=top_n, history=history), indent=2
+            )
 
         if name == "get_sector_performance":
-            universe = fetch_sp500_universe()
-            return json.dumps(get_sector_breakdown(universe), indent=2)
+            universe = cache.get_universe()
+            history = cache.get_stock_history()
+            return json.dumps(get_sector_breakdown(universe, history=history), indent=2)
 
         if name == "get_top_etfs":
             top_n = inputs.get("top_n", 20)
-            return json.dumps(analyze_top_etfs(top_n=top_n), indent=2)
+            ratios = cache.get_expense_ratios(ETF_UNIVERSE)
+            return json.dumps(
+                analyze_top_etfs(
+                    top_n=top_n,
+                    history=cache.get_etf_history(),
+                    expense_ratios=ratios,
+                ),
+                indent=2,
+            )
 
         if name == "get_top_mutual_funds":
             top_n = inputs.get("top_n", 20)
-            return json.dumps(analyze_top_mutual_funds(top_n=top_n), indent=2)
+            mf_tickers = list(MUTUAL_FUND_UNIVERSE.keys())
+            ratios = cache.get_expense_ratios(mf_tickers)
+            return json.dumps(
+                analyze_top_mutual_funds(
+                    top_n=top_n,
+                    history=cache.get_mf_history(),
+                    expense_ratios=ratios,
+                ),
+                indent=2,
+            )
 
         if name == "send_email_report":
             result = send_report_email(
@@ -222,6 +300,7 @@ def run_agent(max_turns: int = 10) -> None:
         raise ValueError("ANTHROPIC_API_KEY not set in .env")
 
     client = Anthropic(api_key=api_key)
+    cache = AgentCache()
     messages: list[dict] = [
         {
             "role": "user",
@@ -258,7 +337,7 @@ def run_agent(max_turns: int = 10) -> None:
             if block.type != "tool_use":
                 continue
             logger.info("Executing tool: %s", block.name)
-            output = execute_tool(block.name, block.input)
+            output = execute_tool(block.name, block.input, cache)
             tool_results.append(
                 {
                     "type": "tool_result",
@@ -283,16 +362,21 @@ def run_pipeline() -> dict:
     stock_history = fetch_stock_history(universe["Symbol"].tolist())
     etf_history = fetch_stock_history(ETF_UNIVERSE)
     mf_history = fetch_stock_history(list(MUTUAL_FUND_UNIVERSE.keys()))
+    expense_ratios = _fund_expense_ratios()
     crypto_history = fetch_stock_history(_crypto_tickers())
     as_of = _report_as_of(stock_history, etf_history, mf_history, crypto_history)
 
     # --- Report 1: day-change ranking (current) ---
     stocks = analyze_top_stocks(universe, top_n=20, history=stock_history)
     sectors = get_sector_breakdown(universe, history=stock_history)
-    etfs = analyze_top_etfs(top_n=20, history=etf_history)
-    mutual_funds = analyze_top_mutual_funds(top_n=20, history=mf_history)
+    etfs = analyze_top_etfs(top_n=20, history=etf_history, expense_ratios=expense_ratios)
+    mutual_funds = analyze_top_mutual_funds(
+        top_n=20, history=mf_history, expense_ratios=expense_ratios
+    )
     crypto_overview = get_crypto_overview("daily", history=crypto_history, variant="day")
-    crypto_etfs = analyze_top_crypto_etfs(top_n=20, history=crypto_history)
+    crypto_etfs = analyze_top_crypto_etfs(
+        top_n=20, history=crypto_history, expense_ratios=expense_ratios
+    )
 
     top_mover = stocks[0]["ticker"] if stocks else "N/A"
     best_sector = sectors[0]["sector"] if sectors else "N/A"
@@ -316,12 +400,18 @@ def run_pipeline() -> dict:
     # --- Report 2: legacy 1M momentum ranking ---
     stocks_mom = analyze_top_stocks_momentum(universe, top_n=20, history=stock_history)
     sectors_mom = get_sector_breakdown_momentum(universe, history=stock_history)
-    etfs_mom = analyze_top_etfs_momentum(top_n=20, history=etf_history)
-    mutual_mom = analyze_top_mutual_funds_momentum(top_n=20, history=mf_history)
+    etfs_mom = analyze_top_etfs_momentum(
+        top_n=20, history=etf_history, expense_ratios=expense_ratios
+    )
+    mutual_mom = analyze_top_mutual_funds_momentum(
+        top_n=20, history=mf_history, expense_ratios=expense_ratios
+    )
     crypto_overview_mom = get_crypto_overview(
         "daily", history=crypto_history, variant="momentum"
     )
-    crypto_etfs_mom = analyze_top_crypto_etfs_momentum(top_n=20, history=crypto_history)
+    crypto_etfs_mom = analyze_top_crypto_etfs_momentum(
+        top_n=20, history=crypto_history, expense_ratios=expense_ratios
+    )
 
     top_mom = stocks_mom[0]["ticker"] if stocks_mom else "N/A"
     best_sector_mom = sectors_mom[0]["sector"] if sectors_mom else "N/A"
@@ -374,15 +464,22 @@ def run_weekly_pipeline() -> dict:
     stock_history = fetch_stock_history(universe["Symbol"].tolist())
     etf_history = fetch_stock_history(ETF_UNIVERSE)
     mf_history = fetch_stock_history(list(MUTUAL_FUND_UNIVERSE.keys()))
+    expense_ratios = _fund_expense_ratios()
     crypto_history = fetch_stock_history(_crypto_tickers())
     as_of = _report_as_of(stock_history, etf_history, mf_history, crypto_history)
 
     stocks = analyze_top_stocks_weekly(universe, top_n=20, history=stock_history)
     sectors = get_sector_breakdown_weekly(universe, history=stock_history)
-    etfs = analyze_top_etfs_weekly(top_n=20, history=etf_history)
-    mutual_funds = analyze_top_mutual_funds_weekly(top_n=20, history=mf_history)
+    etfs = analyze_top_etfs_weekly(
+        top_n=20, history=etf_history, expense_ratios=expense_ratios
+    )
+    mutual_funds = analyze_top_mutual_funds_weekly(
+        top_n=20, history=mf_history, expense_ratios=expense_ratios
+    )
     crypto_overview = get_crypto_overview("weekly", history=crypto_history)
-    crypto_etfs = analyze_top_crypto_etfs_weekly(top_n=20, history=crypto_history)
+    crypto_etfs = analyze_top_crypto_etfs_weekly(
+        top_n=20, history=crypto_history, expense_ratios=expense_ratios
+    )
 
     top_mover = stocks[0]["ticker"] if stocks else "N/A"
     best_sector = sectors[0]["sector"] if sectors else "N/A"
@@ -418,15 +515,22 @@ def run_monthly_pipeline() -> dict:
     stock_history = fetch_stock_history(universe["Symbol"].tolist())
     etf_history = fetch_stock_history(ETF_UNIVERSE)
     mf_history = fetch_stock_history(list(MUTUAL_FUND_UNIVERSE.keys()))
+    expense_ratios = _fund_expense_ratios()
     crypto_history = fetch_stock_history(_crypto_tickers())
     as_of = _report_as_of(stock_history, etf_history, mf_history, crypto_history)
 
     stocks = analyze_top_stocks_monthly(universe, top_n=20, history=stock_history)
     sectors = get_sector_breakdown_monthly(universe, history=stock_history)
-    etfs = analyze_top_etfs_monthly(top_n=20, history=etf_history)
-    mutual_funds = analyze_top_mutual_funds_monthly(top_n=20, history=mf_history)
+    etfs = analyze_top_etfs_monthly(
+        top_n=20, history=etf_history, expense_ratios=expense_ratios
+    )
+    mutual_funds = analyze_top_mutual_funds_monthly(
+        top_n=20, history=mf_history, expense_ratios=expense_ratios
+    )
     crypto_overview = get_crypto_overview("monthly", history=crypto_history)
-    crypto_etfs = analyze_top_crypto_etfs_monthly(top_n=20, history=crypto_history)
+    crypto_etfs = analyze_top_crypto_etfs_monthly(
+        top_n=20, history=crypto_history, expense_ratios=expense_ratios
+    )
 
     top_mover = stocks[0]["ticker"] if stocks else "N/A"
     best_sector = sectors[0]["sector"] if sectors else "N/A"

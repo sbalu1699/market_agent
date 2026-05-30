@@ -183,16 +183,37 @@ def fetch_expense_ratio(ticker: str) -> float | None:
         return None
 
 
-def fetch_expense_ratios(tickers: list[str]) -> dict[str, float | None]:
-    """Batch expense ratios for fund tickers."""
-    return {ticker: fetch_expense_ratio(ticker) for ticker in tickers}
+_expense_ratio_cache: dict[str, float | None] = {}
 
 
-def attach_expense_ratios(funds: list[dict]) -> list[dict]:
+def clear_expense_ratio_cache() -> None:
+    """Clear module expense-ratio cache (call at start of each pipeline run)."""
+    _expense_ratio_cache.clear()
+
+
+def fetch_expense_ratios(
+    tickers: list[str],
+    *,
+    cache: dict[str, float | None] | None = None,
+) -> dict[str, float | None]:
+    """Batch expense ratios for fund tickers; reuses module or caller cache."""
+    store = cache if cache is not None else _expense_ratio_cache
+    unique = list(dict.fromkeys(tickers))
+    for ticker in unique:
+        if ticker not in store:
+            store[ticker] = fetch_expense_ratio(ticker)
+    return {ticker: store[ticker] for ticker in tickers}
+
+
+def attach_expense_ratios(
+    funds: list[dict],
+    ratios: dict[str, float | None] | None = None,
+) -> list[dict]:
     """Add expense_ratio (percent) to fund result dicts."""
     if not funds:
         return funds
-    ratios = fetch_expense_ratios([f["ticker"] for f in funds])
+    if ratios is None:
+        ratios = fetch_expense_ratios([f["ticker"] for f in funds])
     enriched: list[dict] = []
     for fund in funds:
         row = dict(fund)

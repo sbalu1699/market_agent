@@ -69,8 +69,12 @@ def _rank_top(
     sort_key: str,
     top_n: int,
     history: dict | None = None,
+    expense_ratios: dict[str, float | None] | None = None,
 ) -> list[dict]:
-    return attach_expense_ratios(_collect_all(tickers, sort_key, history)[:top_n])
+    return attach_expense_ratios(
+        _collect_all(tickers, sort_key, history)[:top_n],
+        ratios=expense_ratios,
+    )
 
 
 def get_crypto_overview(
@@ -99,17 +103,34 @@ def analyze_top_crypto_etfs(
     top_n: int = 20,
     history: dict | None = None,
     sort_key: str = "day_change_pct",
+    expense_ratios: dict[str, float | None] | None = None,
 ) -> list[dict]:
-    return _rank_top(CRYPTO_ETF_UNIVERSE, sort_key, top_n, history)
+    return _rank_top(CRYPTO_ETF_UNIVERSE, sort_key, top_n, history, expense_ratios)
 
 
-def analyze_top_crypto_etfs_weekly(top_n: int = 20, history: dict | None = None) -> list[dict]:
-    return _rank_top(CRYPTO_ETF_UNIVERSE, "week_change_pct", top_n, history)
+def analyze_top_crypto_etfs_weekly(
+    top_n: int = 20,
+    history: dict | None = None,
+    expense_ratios: dict[str, float | None] | None = None,
+) -> list[dict]:
+    return _rank_top(
+        CRYPTO_ETF_UNIVERSE, "week_change_pct", top_n, history, expense_ratios
+    )
 
 
-def analyze_top_crypto_etfs_monthly(top_n: int = 20, history: dict | None = None) -> list[dict]:
-    return _rank_top(CRYPTO_ETF_UNIVERSE, "month_change_pct", top_n, history)
+def analyze_top_crypto_etfs_monthly(
+    top_n: int = 20,
+    history: dict | None = None,
+    expense_ratios: dict[str, float | None] | None = None,
+) -> list[dict]:
+    return _rank_top(
+        CRYPTO_ETF_UNIVERSE, "month_change_pct", top_n, history, expense_ratios
+    )
 
 
-def analyze_top_crypto_etfs_momentum(top_n: int = 20, history: dict | None = None) -> list[dict]:
-    return _rank_top(CRYPTO_ETF_UNIVERSE, "return_1m", top_n, history)
+def analyze_top_crypto_etfs_momentum(
+    top_n: int = 20,
+    history: dict | None = None,
+    expense_ratios: dict[str, float | None] | None = None,
+) -> list[dict]:
+    return _rank_top(CRYPTO_ETF_UNIVERSE, "return_1m", top_n, history, expense_ratios)

@@ -26,7 +26,7 @@ from agent import (
     run_pipeline,
     run_weekly_pipeline,
 )
-from scheduler import is_trading_day
+from mcp_server.trading_calendar import is_trading_day
 
 logging.basicConfig(
     level=logging.INFO,
