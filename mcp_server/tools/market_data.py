@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import StringIO
 
 import pandas as pd
@@ -162,22 +164,45 @@ def _normalize_expense_ratio(raw: object) -> float | None:
     return val * 100
 
 
+def _expense_ratio_from_info(info: dict) -> float | None:
+    """Parse expense ratio (percent) from a yfinance info dict."""
+    if info.get("netExpenseRatio") is not None:
+        val = float(info["netExpenseRatio"])
+        return val if val > 0 else None
+    if info.get("annualReportExpenseRatio") is not None:
+        return _normalize_expense_ratio(info["annualReportExpenseRatio"])
+    if info.get("expenseRatio") is not None:
+        val = float(info["expenseRatio"])
+        return val * 100 if val < 0.05 else val if val > 0 else None
+    if info.get("fundExpenseRatio") is not None:
+        val = float(info["fundExpenseRatio"])
+        return val * 100 if val < 0.05 else val if val > 0 else None
+    return None
+
+
+def _expense_ratio_from_funds_data(ticker: str) -> float | None:
+    """Fallback via yfinance funds_data when info lacks expense ratio fields."""
+    try:
+        fund_ops = getattr(yf.Ticker(ticker).funds_data, "fund_operations", None)
+        if not fund_ops:
+            return None
+        raw = fund_ops.get("Annual Report Expense Ratio")
+        if raw is None:
+            return None
+        return _normalize_expense_ratio(raw)
+    except Exception as exc:
+        logger.debug("funds_data expense ratio unavailable for %s: %s", ticker, exc)
+        return None
+
+
 def fetch_expense_ratio(ticker: str) -> float | None:
     """Fetch net/annual expense ratio for an ETF or mutual fund (returns percent)."""
     try:
         info = yf.Ticker(ticker).info or {}
-        if info.get("netExpenseRatio") is not None:
-            val = float(info["netExpenseRatio"])
-            return val if val > 0 else None
-        if info.get("annualReportExpenseRatio") is not None:
-            return _normalize_expense_ratio(info["annualReportExpenseRatio"])
-        if info.get("expenseRatio") is not None:
-            val = float(info["expenseRatio"])
-            return val * 100 if val < 0.05 else val if val > 0 else None
-        if info.get("fundExpenseRatio") is not None:
-            val = float(info["fundExpenseRatio"])
-            return val * 100 if val < 0.05 else val if val > 0 else None
-        return None
+        ratio = _expense_ratio_from_info(info)
+        if ratio is not None:
+            return ratio
+        return _expense_ratio_from_funds_data(ticker)
     except Exception as exc:
         logger.debug("Expense ratio unavailable for %s: %s", ticker, exc)
         return None
@@ -195,13 +220,29 @@ def fetch_expense_ratios(
     tickers: list[str],
     *,
     cache: dict[str, float | None] | None = None,
+    max_workers: int | None = None,
 ) -> dict[str, float | None]:
-    """Batch expense ratios for fund tickers; reuses module or caller cache."""
+    """Fetch expense ratios in parallel; reuses module or caller cache."""
     store = cache if cache is not None else _expense_ratio_cache
     unique = list(dict.fromkeys(tickers))
-    for ticker in unique:
-        if ticker not in store:
-            store[ticker] = fetch_expense_ratio(ticker)
+    to_fetch = [ticker for ticker in unique if ticker not in store]
+    if not to_fetch:
+        return {ticker: store[ticker] for ticker in tickers}
+
+    workers = max_workers or int(os.getenv("EXPENSE_RATIO_WORKERS", "12"))
+    workers = max(1, min(workers, len(to_fetch)))
+    logger.info("Fetching expense ratios for %d tickers (%d workers)", len(to_fetch), workers)
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(fetch_expense_ratio, ticker): ticker for ticker in to_fetch}
+        for future in as_completed(futures):
+            ticker = futures[future]
+            try:
+                store[ticker] = future.result()
+            except Exception as exc:
+                logger.debug("Expense ratio fetch failed for %s: %s", ticker, exc)
+                store[ticker] = None
+
     return {ticker: store[ticker] for ticker in tickers}
 
 

@@ -124,10 +124,8 @@ class AgentCache:
         return {t: self.expense_ratios.get(t) for t in tickers}
 
 
-def _fund_expense_ratios() -> dict[str, float | None]:
-    """Fetch expense ratios once for ETF, mutual fund, and crypto ETF universes."""
-    clear_expense_ratio_cache()
-    tickers = list(
+def _fund_tickers() -> list[str]:
+    return list(
         dict.fromkeys(
             [
                 *ETF_UNIVERSE,
@@ -136,7 +134,41 @@ def _fund_expense_ratios() -> dict[str, float | None]:
             ]
         )
     )
+
+
+def _bullion_fund_tickers() -> list[str]:
+    return list(
+        dict.fromkeys(
+            [
+                *BULLION_ETF_UNIVERSE.keys(),
+                *BULLION_MUTUAL_FUND_UNIVERSE.keys(),
+            ]
+        )
+    )
+
+
+def _prefetch_expense_ratios(
+    tickers: list[str], *, clear: bool = False
+) -> dict[str, float | None]:
+    if clear:
+        clear_expense_ratio_cache()
     return fetch_expense_ratios(tickers)
+
+
+def _fund_expense_ratios(*, clear: bool = True) -> dict[str, float | None]:
+    """Fetch expense ratios once for broad-market ETF/MF/crypto universes."""
+    return _prefetch_expense_ratios(_fund_tickers(), clear=clear)
+
+
+def _bullion_expense_ratios(*, clear: bool = False) -> dict[str, float | None]:
+    """Fetch expense ratios for bullion ETF/MF universes (additive by default)."""
+    return _prefetch_expense_ratios(_bullion_fund_tickers(), clear=clear)
+
+
+def _combined_fund_expense_ratios() -> dict[str, float | None]:
+    """Prefetch broad + bullion fund tickers in one parallel batch."""
+    tickers = list(dict.fromkeys([*_fund_tickers(), *_bullion_fund_tickers()]))
+    return _prefetch_expense_ratios(tickers, clear=True)
 
 
 def _crypto_tickers() -> list[str]:
@@ -457,14 +489,17 @@ def run_pipeline() -> dict:
     }
 
 
-def run_weekly_pipeline() -> dict:
+def run_weekly_pipeline(
+    expense_ratios: dict[str, float | None] | None = None,
+) -> dict:
     """Weekly pipeline — best performers over the 5-day trading week."""
     logger.info("Running weekly market pipeline...")
     universe = fetch_sp500_universe()
     stock_history = fetch_stock_history(universe["Symbol"].tolist())
     etf_history = fetch_stock_history(ETF_UNIVERSE)
     mf_history = fetch_stock_history(list(MUTUAL_FUND_UNIVERSE.keys()))
-    expense_ratios = _fund_expense_ratios()
+    if expense_ratios is None:
+        expense_ratios = _fund_expense_ratios()
     crypto_history = fetch_stock_history(_crypto_tickers())
     as_of = _report_as_of(stock_history, etf_history, mf_history, crypto_history)
 
@@ -508,14 +543,17 @@ def run_weekly_pipeline() -> dict:
     }
 
 
-def run_monthly_pipeline() -> dict:
+def run_monthly_pipeline(
+    expense_ratios: dict[str, float | None] | None = None,
+) -> dict:
     """Monthly pipeline — best performers over ~21 trading days (1 month)."""
     logger.info("Running monthly market pipeline...")
     universe = fetch_sp500_universe()
     stock_history = fetch_stock_history(universe["Symbol"].tolist())
     etf_history = fetch_stock_history(ETF_UNIVERSE)
     mf_history = fetch_stock_history(list(MUTUAL_FUND_UNIVERSE.keys()))
-    expense_ratios = _fund_expense_ratios()
+    if expense_ratios is None:
+        expense_ratios = _fund_expense_ratios()
     crypto_history = fetch_stock_history(_crypto_tickers())
     as_of = _report_as_of(stock_history, etf_history, mf_history, crypto_history)
 
@@ -559,9 +597,13 @@ def run_monthly_pipeline() -> dict:
     }
 
 
-def run_bullion_weekly_pipeline() -> dict:
+def run_bullion_weekly_pipeline(
+    expense_ratios: dict[str, float | None] | None = None,
+) -> dict:
     """Weekly bullion report — precious metals, miners, ETFs, and mutual funds."""
     logger.info("Running bullion weekly pipeline...")
+    if expense_ratios is None:
+        expense_ratios = _bullion_expense_ratios(clear=True)
     market_tickers = list(BULLION_MARKET_UNIVERSE.keys())
     stock_tickers = list(BULLION_STOCK_UNIVERSE.keys())
     etf_tickers = list(BULLION_ETF_UNIVERSE.keys())
@@ -582,8 +624,12 @@ def run_bullion_weekly_pipeline() -> dict:
     overview = get_bullion_market_overview("weekly", history=market_history)
     forex = get_forex_overview("weekly", history=forex_history)
     stocks = analyze_bullion_stocks_weekly(top_n=20, history=stock_history)
-    etfs = analyze_bullion_etfs_weekly(top_n=20, history=etf_history)
-    mutual_funds = analyze_bullion_mutual_funds_weekly(top_n=20, history=mf_history)
+    etfs = analyze_bullion_etfs_weekly(
+        top_n=20, history=etf_history, expense_ratios=expense_ratios
+    )
+    mutual_funds = analyze_bullion_mutual_funds_weekly(
+        top_n=20, history=mf_history, expense_ratios=expense_ratios
+    )
 
     top_metal = overview[0]["name"] if overview else "N/A"
     top_stock = stocks[0]["ticker"] if stocks else "N/A"
@@ -612,9 +658,13 @@ def run_bullion_weekly_pipeline() -> dict:
     }
 
 
-def run_bullion_monthly_pipeline() -> dict:
+def run_bullion_monthly_pipeline(
+    expense_ratios: dict[str, float | None] | None = None,
+) -> dict:
     """Monthly bullion report — precious metals, miners, ETFs, and mutual funds."""
     logger.info("Running bullion monthly pipeline...")
+    if expense_ratios is None:
+        expense_ratios = _bullion_expense_ratios(clear=True)
     market_tickers = list(BULLION_MARKET_UNIVERSE.keys())
     stock_tickers = list(BULLION_STOCK_UNIVERSE.keys())
     etf_tickers = list(BULLION_ETF_UNIVERSE.keys())
@@ -635,8 +685,12 @@ def run_bullion_monthly_pipeline() -> dict:
     overview = get_bullion_market_overview("monthly", history=market_history)
     forex = get_forex_overview("monthly", history=forex_history)
     stocks = analyze_bullion_stocks_monthly(top_n=20, history=stock_history)
-    etfs = analyze_bullion_etfs_monthly(top_n=20, history=etf_history)
-    mutual_funds = analyze_bullion_mutual_funds_monthly(top_n=20, history=mf_history)
+    etfs = analyze_bullion_etfs_monthly(
+        top_n=20, history=etf_history, expense_ratios=expense_ratios
+    )
+    mutual_funds = analyze_bullion_mutual_funds_monthly(
+        top_n=20, history=mf_history, expense_ratios=expense_ratios
+    )
 
     top_metal = overview[0]["name"] if overview else "N/A"
     top_stock = stocks[0]["ticker"] if stocks else "N/A"
@@ -673,11 +727,13 @@ if __name__ == "__main__":
 
     if mode == "pipeline":
         if report_type == "weekly":
-            result = run_weekly_pipeline()
-            bullion = run_bullion_weekly_pipeline()
+            expense_ratios = _combined_fund_expense_ratios()
+            result = run_weekly_pipeline(expense_ratios=expense_ratios)
+            bullion = run_bullion_weekly_pipeline(expense_ratios=expense_ratios)
         elif report_type == "monthly":
-            result = run_monthly_pipeline()
-            bullion = run_bullion_monthly_pipeline()
+            expense_ratios = _combined_fund_expense_ratios()
+            result = run_monthly_pipeline(expense_ratios=expense_ratios)
+            bullion = run_bullion_monthly_pipeline(expense_ratios=expense_ratios)
         elif report_type == "bullion-weekly":
             result = run_bullion_weekly_pipeline()
             bullion = None

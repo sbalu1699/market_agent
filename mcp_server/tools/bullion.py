@@ -212,7 +212,9 @@ def analyze_bullion_stocks_monthly(
 
 
 def analyze_bullion_etfs_weekly(
-    top_n: int = 20, history: dict | None = None
+    top_n: int = 20,
+    history: dict | None = None,
+    expense_ratios: dict[str, float | None] | None = None,
 ) -> list[dict]:
     return attach_expense_ratios(
         _collect_filtered(
@@ -222,12 +224,15 @@ def analyze_bullion_etfs_weekly(
             top_n,
             history,
             sector="Bullion ETF",
-        )
+        ),
+        ratios=expense_ratios,
     )
 
 
 def analyze_bullion_etfs_monthly(
-    top_n: int = 20, history: dict | None = None
+    top_n: int = 20,
+    history: dict | None = None,
+    expense_ratios: dict[str, float | None] | None = None,
 ) -> list[dict]:
     return attach_expense_ratios(
         _collect_filtered(
@@ -237,12 +242,15 @@ def analyze_bullion_etfs_monthly(
             top_n,
             history,
             sector="Bullion ETF",
-        )
+        ),
+        ratios=expense_ratios,
     )
 
 
 def analyze_bullion_mutual_funds_weekly(
-    top_n: int = 20, history: dict | None = None
+    top_n: int = 20,
+    history: dict | None = None,
+    expense_ratios: dict[str, float | None] | None = None,
 ) -> list[dict]:
     return attach_expense_ratios(
         _collect_filtered(
@@ -252,12 +260,15 @@ def analyze_bullion_mutual_funds_weekly(
             top_n,
             history,
             sector="Bullion Fund",
-        )
+        ),
+        ratios=expense_ratios,
     )
 
 
 def analyze_bullion_mutual_funds_monthly(
-    top_n: int = 20, history: dict | None = None
+    top_n: int = 20,
+    history: dict | None = None,
+    expense_ratios: dict[str, float | None] | None = None,
 ) -> list[dict]:
     return attach_expense_ratios(
         _collect_filtered(
@@ -267,5 +278,6 @@ def analyze_bullion_mutual_funds_monthly(
             top_n,
             history,
             sector="Bullion Fund",
-        )
+        ),
+        ratios=expense_ratios,
     )

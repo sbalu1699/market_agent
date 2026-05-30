@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT))
 load_dotenv(ROOT / ".env")
 
 from agent import (
+    _combined_fund_expense_ratios,
     run_bullion_monthly_pipeline,
     run_bullion_weekly_pipeline,
     run_monthly_pipeline,
@@ -123,12 +124,14 @@ def run_slot(slot: str, force: bool = False) -> dict:
     if slot in ("daily-am", "daily-pm"):
         result = run_pipeline()
     elif slot == "weekly":
-        result = run_weekly_pipeline()
-        bullion = run_bullion_weekly_pipeline()
+        expense_ratios = _combined_fund_expense_ratios()
+        result = run_weekly_pipeline(expense_ratios=expense_ratios)
+        bullion = run_bullion_weekly_pipeline(expense_ratios=expense_ratios)
         result = {"broad": result, "bullion": bullion}
     elif slot == "monthly":
-        result = run_monthly_pipeline()
-        bullion = run_bullion_monthly_pipeline()
+        expense_ratios = _combined_fund_expense_ratios()
+        result = run_monthly_pipeline(expense_ratios=expense_ratios)
+        bullion = run_bullion_monthly_pipeline(expense_ratios=expense_ratios)
         result = {"broad": result, "bullion": bullion}
     else:
         raise ValueError(f"Unknown slot: {slot}")

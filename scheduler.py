@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT))
 load_dotenv(ROOT / ".env")
 
 from agent import (
+    _combined_fund_expense_ratios,
     run_agent,
     run_bullion_monthly_pipeline,
     run_bullion_weekly_pipeline,
@@ -60,8 +61,9 @@ def weekly_job() -> None:
     now = datetime.now(ET)
     logger.info("Starting weekly market report at %s ET", now.strftime("%H:%M"))
     try:
-        run_weekly_pipeline()
-        run_bullion_weekly_pipeline()
+        expense_ratios = _combined_fund_expense_ratios()
+        run_weekly_pipeline(expense_ratios=expense_ratios)
+        run_bullion_weekly_pipeline(expense_ratios=expense_ratios)
         logger.info("Weekly report completed.")
     except Exception:
         logger.exception("Weekly report failed.")
@@ -72,8 +74,9 @@ def monthly_job() -> None:
     now = datetime.now(ET)
     logger.info("Starting monthly market report at %s ET", now.strftime("%H:%M"))
     try:
-        run_monthly_pipeline()
-        run_bullion_monthly_pipeline()
+        expense_ratios = _combined_fund_expense_ratios()
+        run_monthly_pipeline(expense_ratios=expense_ratios)
+        run_bullion_monthly_pipeline(expense_ratios=expense_ratios)
         logger.info("Monthly report completed.")
     except Exception:
         logger.exception("Monthly report failed.")
