@@ -5,11 +5,8 @@
 #   EMAIL_FROM        — e.g. "Market Agent <reports@yourdomain.com>"
 #   EMAIL_TO          — recipient address
 #
-# Optional secrets (defaults shown):
-#   AGENT_MODE=pipeline
-#
-# Cron uses UTC. Each slot has two cron lines (EDT/CDT + EST/CST). scripts/scheduled_run.py
-# verifies the current Eastern time is within ±20 minutes of the target before sending.
+# Cron uses UTC (dual lines for DST). Scheduled runs use calendar-based slot
+# detection because GitHub cron often starts 30–90+ minutes late.
 
 name: Market Reports
 
@@ -49,7 +46,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      # 2:00 PM Central = 3:00 PM Eastern (when both zones are on daylight time)
       WEEKLY_SCHEDULE_HOUR: "15"
       WEEKLY_SCHEDULE_MINUTE: "0"
     steps:
@@ -69,30 +65,25 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "name=${{ inputs.slot }}" >> "$GITHUB_OUTPUT"
             echo "force=${{ inputs.force }}" >> "$GITHUB_OUTPUT"
+            echo "trust=false" >> "$GITHUB_OUTPUT"
           else
-            # Reuse ET ±20 min windows from scripts/scheduled_run.py (handles cron queue delay).
             SLOT=$(python -c "
           import sys
           sys.path.insert(0, '.')
-          from datetime import datetime
-          from zoneinfo import ZoneInfo
-          from scripts.scheduled_run import _slot_config, _in_time_window
-          now = datetime.now(ZoneInfo('America/New_York'))
-          best = None
-          best_delta = None
-          for slot in ('daily-am', 'daily-pm', 'weekly', 'monthly'):
-              cfg = _slot_config(slot)
-              target = now.replace(hour=cfg['hour'], minute=cfg['minute'], second=0, microsecond=0)
-              delta = abs((now - target).total_seconds())
-              if delta <= 20 * 60 and (best_delta is None or delta < best_delta):
-                  best = slot
-                  best_delta = delta
-          print(best or 'unknown')
+          from scripts.scheduled_run import resolve_schedule_slot
+          print(resolve_schedule_slot())
           ")
             echo "name=$SLOT" >> "$GITHUB_OUTPUT"
             echo "force=false" >> "$GITHUB_OUTPUT"
-            echo "Resolved slot $SLOT"
+            echo "trust=true" >> "$GITHUB_OUTPUT"
+            echo "Resolved slot $SLOT (calendar-based, cron delay tolerant)"
           fi
+
+      - name: Fail if schedule slot unknown
+        if: github.event_name == 'schedule' && steps.slot.outputs.name == 'unknown'
+        run: |
+          echo "Could not resolve schedule slot from ET calendar"
+          exit 1
 
       - name: Run market pipeline
         if: steps.slot.outputs.name != 'unknown'
@@ -102,8 +93,10 @@ jobs:
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
         run: |
-          FORCE_FLAG=""
+          EXTRA=""
           if [ "${{ steps.slot.outputs.force }}" = "true" ]; then
-            FORCE_FLAG="--force"
+            EXTRA="--force"
+          elif [ "${{ steps.slot.outputs.trust }}" = "true" ]; then
+            EXTRA="--trust-schedule"
           fi
-          python scripts/scheduled_run.py "${{ steps.slot.outputs.name }}" $FORCE_FLAG
+          python scripts/scheduled_run.py "${{ steps.slot.outputs.name }}" $EXTRA

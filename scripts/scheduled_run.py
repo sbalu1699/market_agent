@@ -36,7 +36,7 @@ logging.basicConfig(
 logger = logging.getLogger("scheduled-run")
 
 ET = ZoneInfo("America/New_York")
-TOLERANCE_MINUTES = 20
+TOLERANCE_MINUTES = int(os.getenv("SCHEDULE_TOLERANCE_MINUTES", "20"))
 
 
 def _slot_config(slot: str) -> dict:
@@ -50,8 +50,8 @@ def _slot_config(slot: str) -> dict:
             "minute": int(os.getenv("SCHEDULE_MINUTE", "4")),
         },
         "weekly": {
-            "hour": int(os.getenv("WEEKLY_SCHEDULE_HOUR", "10")),
-            "minute": int(os.getenv("WEEKLY_SCHEDULE_MINUTE", "6")),
+            "hour": int(os.getenv("WEEKLY_SCHEDULE_HOUR", "15")),
+            "minute": int(os.getenv("WEEKLY_SCHEDULE_MINUTE", "0")),
         },
         "monthly": {
             "hour": int(os.getenv("MONTHLY_SCHEDULE_HOUR", "19")),
@@ -74,8 +74,30 @@ def _in_time_window(now: datetime, hour: int, minute: int) -> bool:
     return delta <= TOLERANCE_MINUTES * 60
 
 
-def should_run(slot: str, now: datetime | None = None, force: bool = False) -> bool:
-    """Return True when the ET clock matches this schedule slot."""
+def resolve_schedule_slot(now: datetime | None = None) -> str:
+    """Pick report slot from ET calendar (for GitHub cron, which often runs late)."""
+    now = now or datetime.now(ET)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=ET)
+    else:
+        now = now.astimezone(ET)
+
+    if _is_last_day_of_month(now) and now.hour >= 17:
+        return "monthly"
+    if now.weekday() == 5:
+        return "weekly"
+    if now.weekday() < 5:
+        return "daily-pm" if now.hour >= 15 else "daily-am"
+    return "unknown"
+
+
+def should_run(
+    slot: str,
+    now: datetime | None = None,
+    force: bool = False,
+    trust_schedule: bool = False,
+) -> bool:
+    """Return True when this schedule slot should run."""
     if force:
         return True
 
@@ -85,17 +107,18 @@ def should_run(slot: str, now: datetime | None = None, force: bool = False) -> b
     else:
         now = now.astimezone(ET)
 
-    cfg = _slot_config(slot)
-    if not _in_time_window(now, cfg["hour"], cfg["minute"]):
-        logger.info(
-            "Skip %s — outside ET window (%02d:%02d ±%dm, now %s)",
-            slot,
-            cfg["hour"],
-            cfg["minute"],
-            TOLERANCE_MINUTES,
-            now.strftime("%H:%M %Z"),
-        )
-        return False
+    if not trust_schedule:
+        cfg = _slot_config(slot)
+        if not _in_time_window(now, cfg["hour"], cfg["minute"]):
+            logger.info(
+                "Skip %s — outside ET window (%02d:%02d ±%dm, now %s)",
+                slot,
+                cfg["hour"],
+                cfg["minute"],
+                TOLERANCE_MINUTES,
+                now.strftime("%H:%M %Z"),
+            )
+            return False
 
     if slot in ("daily-am", "daily-pm"):
         if not is_trading_day(now):
@@ -113,9 +136,13 @@ def should_run(slot: str, now: datetime | None = None, force: bool = False) -> b
     return True
 
 
-def run_slot(slot: str, force: bool = False) -> dict:
+def run_slot(
+    slot: str,
+    force: bool = False,
+    trust_schedule: bool = False,
+) -> dict:
     now = datetime.now(ET)
-    if not should_run(slot, now=now, force=force):
+    if not should_run(slot, now=now, force=force, trust_schedule=trust_schedule):
         return {"status": "skipped", "slot": slot}
 
     os.environ.setdefault("AGENT_MODE", "pipeline")
@@ -151,10 +178,17 @@ def main() -> None:
         action="store_true",
         help="Run even if ET time/day gates would skip",
     )
+    parser.add_argument(
+        "--trust-schedule",
+        action="store_true",
+        help="Skip exact-time check (use day/calendar gates only; for GitHub cron)",
+    )
     args = parser.parse_args()
-    output = run_slot(args.slot, force=args.force)
+    output = run_slot(args.slot, force=args.force, trust_schedule=args.trust_schedule)
     print(json.dumps(output, indent=2, default=str))
     if output.get("status") == "skipped":
+        if os.getenv("GITHUB_ACTIONS"):
+            sys.exit(1)
         sys.exit(0)
 
 
