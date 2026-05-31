@@ -17,7 +17,7 @@ Before changing GitHub cron times, email schedules, or diagnosing missed emails:
 
 - **Measured delay:** ~52 minutes (May 30 2026: 2:45 PM CST cron → 3:37 PM CST inbox).
 - **Slot detection:** `github.event.schedule` → `CRON_TO_SLOT` (not calendar clock guessing). `--trust-schedule` for day gates only.
-- **Skip = fail in CI:** `scheduled_run.py` exits 1 on skip when `GITHUB_ACTIONS` is set.
+- Skip in GitHub Actions → exit 1 only for **unexpected** skips; monthly cron on days 28–30 (not last ET day) exits 0 (expected, no email)
 
 ## Target inbox times (what the user expects)
 

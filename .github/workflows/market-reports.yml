@@ -10,6 +10,16 @@
 
 name: Market Reports
 
+run-name: >-
+  ${{
+    github.event_name == 'workflow_dispatch' && format('Manual · {0}', inputs.slot)
+    || (github.event.schedule == '30 15 * * 1-5' || github.event.schedule == '30 16 * * 1-5') && 'Daily AM · 2 broad emails'
+    || (github.event.schedule == '12 22 * * 1-5' || github.event.schedule == '12 23 * * 1-5') && 'Daily PM · 2 broad emails'
+    || (github.event.schedule == '14 14 * * 6' || github.event.schedule == '14 15 * * 6') && 'Weekly · broad + bullion'
+    || (github.event.schedule == '8 22 28-31 * *' || github.event.schedule == '8 23 28-31 * *') && 'Monthly · broad + bullion'
+    || format('Scheduled · {0}', github.event.schedule)
+  }}
+
 on:
   schedule:
     # Daily AM — job queued 10:30 AM Central (15:30 UTC CDT / 16:30 UTC CST), Mon–Fri
@@ -42,7 +52,7 @@ on:
         default: false
 
 jobs:
-  dispatch:
+  send-reports:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -88,8 +98,26 @@ jobs:
           echo "Unknown cron: ${{ github.event.schedule }}"
           exit 1
 
+      - name: Monthly last-day gate
+        if: github.event_name == 'schedule' && steps.slot.outputs.name == 'monthly'
+        id: monthly_gate
+        run: |
+          READY=$(python -c "
+          import sys
+          sys.path.insert(0, '.')
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          from scripts.scheduled_run import _is_last_day_of_month
+          now = datetime.now(ZoneInfo('America/New_York'))
+          print('yes' if _is_last_day_of_month(now) else 'no')
+          ")
+          echo "ready=$READY" >> "$GITHUB_OUTPUT"
+          if [ "$READY" = "no" ]; then
+            echo "Expected — monthly cron fired before last calendar day in ET; no email today"
+          fi
+
       - name: Run market pipeline
-        if: steps.slot.outputs.name != 'unknown'
+        if: steps.slot.outputs.name != 'unknown' && (steps.slot.outputs.name != 'monthly' || steps.monthly_gate.outputs.ready == 'yes')
         env:
           AGENT_MODE: pipeline
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}

@@ -115,8 +115,18 @@ def should_run(
     trust_schedule: bool = False,
 ) -> bool:
     """Return True when this schedule slot should run."""
+    return _skip_reason(slot, now, force, trust_schedule) is None
+
+
+def _skip_reason(
+    slot: str,
+    now: datetime | None = None,
+    force: bool = False,
+    trust_schedule: bool = False,
+) -> str | None:
+    """Return skip reason, or None when the slot should run."""
     if force:
-        return True
+        return None
 
     now = now or datetime.now(ET)
     if now.tzinfo is None:
@@ -135,22 +145,29 @@ def should_run(
                 TOLERANCE_MINUTES,
                 now.strftime("%H:%M %Z"),
             )
-            return False
+            return "outside_time_window"
 
     if slot in ("daily-am", "daily-pm"):
         if not is_trading_day(now):
             logger.info("Skip %s — not a trading day", slot)
-            return False
+            return "not_trading_day"
     elif slot == "weekly":
         if now.weekday() != 5:
             logger.info("Skip weekly — not Saturday in ET")
-            return False
+            return "not_saturday"
     elif slot == "monthly":
         if not _is_last_day_of_month(now):
             logger.info("Skip monthly — not last calendar day in ET")
-            return False
+            return "not_last_day"
 
-    return True
+    return None
+
+
+def _is_expected_skip(reason: str | None, trust_schedule: bool) -> bool:
+    """Expected skips should not fail the GitHub Actions job."""
+    if not trust_schedule or reason is None:
+        return False
+    return reason in ("not_last_day", "not_trading_day")
 
 
 def run_slot(
@@ -159,8 +176,17 @@ def run_slot(
     trust_schedule: bool = False,
 ) -> dict:
     now = datetime.now(ET)
-    if not should_run(slot, now=now, force=force, trust_schedule=trust_schedule):
-        return {"status": "skipped", "slot": slot}
+    reason = _skip_reason(slot, now=now, force=force, trust_schedule=trust_schedule)
+    if reason is not None:
+        expected = _is_expected_skip(reason, trust_schedule)
+        if expected:
+            logger.info("Expected skip for %s (%s) — no email", slot, reason)
+        return {
+            "status": "skipped",
+            "slot": slot,
+            "reason": reason,
+            "expected": expected,
+        }
 
     os.environ.setdefault("AGENT_MODE", "pipeline")
     logger.info("Running slot %s at %s ET", slot, now.strftime("%Y-%m-%d %H:%M"))
@@ -204,6 +230,8 @@ def main() -> None:
     output = run_slot(args.slot, force=args.force, trust_schedule=args.trust_schedule)
     print(json.dumps(output, indent=2, default=str))
     if output.get("status") == "skipped":
+        if output.get("expected"):
+            sys.exit(0)
         if os.getenv("GITHUB_ACTIONS"):
             sys.exit(1)
         sys.exit(0)
